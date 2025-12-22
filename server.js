@@ -1,7 +1,4 @@
-app.use((req, res, next) => {
-  console.log("INCOMING:", req.method, req.path)
-  next()
-})
+
 import express from 'express';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -10,6 +7,11 @@ import { microsoftOAuthRouter } from "./oauth/microsoft.js";
 import { slackReceiver  } from './slack/app.js';
 
 const app = express();
+
+app.use((req, res, next) => {
+  console.log("INCOMING:", req.method, req.path)
+  next()
+})
 
 app.use(express.json());
 app.use("/slack/events", slackReceiver.router)
