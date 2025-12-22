@@ -1,9 +1,9 @@
 import express from "express"
 import { google } from "googleapis"
 
-export const googleOAuthRouter = express.Router()
+export const googleOAuthRouter = express.Router();
 
-const oauth2Client = new google.OAuth2(
+const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
     process.env.GOOGLE_REDIRECT

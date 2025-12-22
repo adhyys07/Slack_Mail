@@ -1,14 +1,14 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import { slackApp } from "./slack/app.js";
+dotenv.config();
 import { googleOAuthRouter } from "./oauth/google.js";
 import { microsoftOAuthRouter } from "./oauth/microsoft.js";
+import { slackReceiver  } from './slack/app.js';
 
-dotenv.config();
 const app = express();
 
 app.use(express.json());
-app.use("/slack/events", slackApp.reciever.app)
+app.use("/slack/events", slackReceiver.router)
 app.use("/oauth/google",googleOAuthRouter)
 app.use("/oauth/microsoft",microsoftOAuthRouter)
 
