@@ -1,3 +1,7 @@
+app.use((req, res, next) => {
+  console.log("INCOMING:", req.method, req.path)
+  next()
+})
 import express from 'express';
 import dotenv from 'dotenv';
 dotenv.config();
