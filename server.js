@@ -14,9 +14,9 @@ app.use((req, res, next) => {
 })
 
 app.use(express.json());
-app.use("https://slack-mail.onrender.com/slack/events", slackReceiver.app)
-app.use("https://slack-mail.onrender.com/oauth/google",googleOAuthRouter)
-app.use("https://slack-mail.onrender.com/oauth/microsoft",microsoftOAuthRouter)
+app.use("/slack/events", slackReceiver.app)
+app.use("/oauth/google",googleOAuthRouter)
+app.use("/oauth/microsoft",microsoftOAuthRouter)
 
 app.listen(3000,() => {
     console.log("Server is running on port 3000");
