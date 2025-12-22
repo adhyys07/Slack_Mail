@@ -1,5 +1,3 @@
-import { act } from "react";
-
 export const providerDetectModal = () => ({
     type: "modal",
     callback_id : "email_submit",
