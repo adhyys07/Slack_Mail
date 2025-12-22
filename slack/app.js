@@ -1,15 +1,16 @@
-import bolt from "@slack/bolt";
 import "dotenv/config"
-const { App, ExpressReceiver } = bolt;
+import { App, ExpressReceiver } from "@slack/bolt"
 
-export const slackReceiver = new ExpressReceiver({
-  signingSecret: process.env.SLACK_SIGNING_SECRET,
-});
+const receiver = new ExpressReceiver({
+  signingSecret: process.env.SLACK_SIGNING_SECRET
+})
 
 export const slackApp = new App({
   token: process.env.SLACK_BOT_TOKEN,
-  receiver: slackReceiver,
+  receiver
 });
+
+export const slackReceiver = receiver
 import {registerCommands} from "./commands.js";
 import { registerActions } from "./actions.js";
 
