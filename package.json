@@ -1,13 +1,18 @@
 {
-  "name": "slack_mail",
+  "name": "slack-email-bot",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "main": "server.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs"
+  "dependencies": {
+    "@slack/bolt": "^3.18.0",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "express": "^4.19.2",
+    "googleapis": "^144.0.0",
+    "imap-simple": "^5.0.0",
+    "nodemailer": "^6.9.8"
+  }
 }
