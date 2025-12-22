@@ -1,5 +1,6 @@
-import "dotenv/config"
-import { App, ExpressReceiver } from "@slack/bolt"
+import "dotenv/config";
+import pkg from "@slack/bolt";
+const { App, ExpressReceiver } = pkg;
 
 const receiver = new ExpressReceiver({
   signingSecret: process.env.SLACK_SIGNING_SECRET
