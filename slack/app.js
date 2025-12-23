@@ -17,3 +17,7 @@ import { registerActions } from "./actions.js";
 
 registerCommands(slackApp);
 registerActions(slackApp);
+
+slackApp.error((err) => {
+  console.error("[bolt error]", err);
+});

@@ -2,18 +2,19 @@ import { detectProvider } from "../utils/providerDetector.js";
 
 export function registerActions(slackApp) {
   slackApp.view("email_submit", async ({ ack, view, body }) => {
+    console.log("[view email_submit] invoked", {
+      user: body?.user?.id,
+      state: view?.state,
+    });
     try {
-      await ack(); // respond within 3s
+      await ack();
 
       const email =
         view?.state?.values?.email?.value?.value ||
         view?.state?.values?.email?.value?.trim?.();
 
       if (!email) {
-        console.warn("[view email_submit] missing email", {
-          user: body?.user?.id,
-          state: view?.state,
-        });
+        console.warn("[view email_submit] missing email", view?.state);
         return;
       }
 
