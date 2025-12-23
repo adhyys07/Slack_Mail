@@ -1,11 +1,14 @@
 import { detectProvider } from "../utils/providerDetector.js";
 
+const baseUrl = process.env.PUBLIC_BASE_URL?.trim();
+
 const oauthUrlFor = (provider) => {
-  if (provider === "gmail") return `${process.env.PUBLIC_BASE_URL}/oauth/google`;
+  if (!baseUrl) return undefined;
+  if (provider === "gmail") return `${baseUrl}/oauth/google`;
   if (["microsoft", "outlook", "office365", "hotmail", "live"].includes(provider)) {
-    return `${process.env.PUBLIC_BASE_URL}/oauth/microsoft`;
+    return `${baseUrl}/oauth/microsoft`;
   }
-  return `${process.env.PUBLIC_BASE_URL}/oauth/microsoft`; // fallback
+  return `${baseUrl}/oauth/microsoft`; // fallback
 };
 
 export function registerActions(slackApp) {
@@ -27,9 +30,8 @@ export function registerActions(slackApp) {
       }
 
       const provider = await detectProvider(email);
-      const base = process.env.PUBLIC_BASE_URL;
-      if (!base) {
-        console.error("[view email_submit] PUBLIC_BASE_URL missing");
+      if (!baseUrl) {
+        console.error("[view email_submit] PUBLIC_BASE_URL missing or blank");
         return;
       }
       const oauthUrl = oauthUrlFor(provider);

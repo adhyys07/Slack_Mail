@@ -58,7 +58,7 @@ microsoftOAuthRouter.get("/callback",async (req,res)=>{
         })
         res.send("Microsoft Email connected successfully")
     } catch (err){
-        console.error(error.response?.data || err.message)
+        console.error(err.response?.data || err.message)
         res.status(500).send("Microsoft OAuth Failed !!")
     }
 })
