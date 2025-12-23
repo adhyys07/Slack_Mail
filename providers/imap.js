@@ -7,13 +7,14 @@ export async function listImapEmails(config) {
         password:config.password,
         host: config.host,
         port: 993,
-        tls: true
-       } 
-    })
+        tls: true,
+        authTimeout:10000,
+       },
+    });
     await connection.openBox("INBOX")
     const results = await connection.search(["UNSEEN"],{
         bodies:["HEADER.FIELD (FROM SUBJECT DATE)"],
         markSeen: false
     })
-    return results
+    return results;
 }
