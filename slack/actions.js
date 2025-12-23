@@ -30,11 +30,14 @@ export function registerActions(slackApp) {
       }
 
       const provider = await detectProvider(email);
-      if (!baseUrl) {
-        console.error("[view email_submit] PUBLIC_BASE_URL missing or blank");
+      const oauthUrl = oauthUrlFor(provider);
+      if (!oauthUrl) {
+        console.error("[view email_submit] missing PUBLIC_BASE_URL or provider unknown", {
+          provider,
+          baseUrl,
+        });
         return;
       }
-      const oauthUrl = oauthUrlFor(provider);
 
       const dmResp = await client.conversations.open({ users: body.user.id });
       if (!dmResp.ok) {
