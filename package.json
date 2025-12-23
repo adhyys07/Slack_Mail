@@ -12,6 +12,7 @@
     "dotenv": "^16.3.1",
     "express": "^4.19.2",
     "googleapis": "^144.0.0",
+    "heroku": "^8.7.1",
     "imap-simple": "^5.0.0",
     "nodemailer": "^6.9.8",
     "react": "^19.2.3",
