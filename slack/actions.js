@@ -27,6 +27,11 @@ export function registerActions(slackApp) {
       }
 
       const provider = await detectProvider(email);
+      const base = process.env.PUBLIC_BASE_URL;
+      if (!base) {
+        console.error("[view email_submit] PUBLIC_BASE_URL missing");
+        return;
+      }
       const oauthUrl = oauthUrlFor(provider);
 
       const dmResp = await client.conversations.open({ users: body.user.id });
@@ -35,25 +40,32 @@ export function registerActions(slackApp) {
         return;
       }
 
+      // Only attach button if URL is valid
+      const blocks = oauthUrl
+        ? [
+            {
+              type: "section",
+              text: { type: "mrkdwn", text: `Connect your *${provider}* account:` },
+            },
+            {
+              type: "actions",
+              elements: [
+                {
+                  type: "button",
+                  text: { type: "plain_text", text: "Continue" },
+                  url: oauthUrl,
+                },
+              ],
+            },
+          ]
+        : undefined;
+
       const postResp = await client.chat.postMessage({
         channel: dmResp.channel.id,
-        text: `Connect your ${provider} account: ${oauthUrl}`,
-        blocks: [
-          {
-            type: "section",
-            text: { type: "mrkdwn", text: `Connect your *${provider}* account:` },
-          },
-          {
-            type: "actions",
-            elements: [
-              {
-                type: "button",
-                text: { type: "plain_text", text: "Continue" },
-                url: oauthUrl,
-              },
-            ],
-          },
-        ],
+        text: oauthUrl
+          ? `Connect your ${provider} account: ${oauthUrl}`
+          : `Connect your ${provider} account using the provided link.`,
+        blocks,
       });
 
       if (!postResp.ok) {
