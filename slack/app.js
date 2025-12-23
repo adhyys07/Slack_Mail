@@ -1,6 +1,6 @@
 import "dotenv/config";
 import pkg from "@slack/bolt";
-const { App, ExpressReceiver } = pkg;
+const { App, ExpressReceiver, LogLevel } = pkg;
 
 const receiver = new ExpressReceiver({
   signingSecret: process.env.SLACK_SIGNING_SECRET
@@ -8,7 +8,8 @@ const receiver = new ExpressReceiver({
 
 export const slackApp = new App({
   token: process.env.SLACK_BOT_TOKEN,
-  receiver
+  receiver,
+  logLevel: LogLevel.DEBUG
 });
 
 export const slackReceiver = receiver
