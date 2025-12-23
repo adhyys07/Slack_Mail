@@ -2,13 +2,14 @@ import { detectProvider } from "../utils/providerDetector.js";
 
 const baseUrl = process.env.PUBLIC_BASE_URL?.trim();
 
-const oauthUrlFor = (provider) => {
+const oauthUrlFor = (provider, slackUserId) => {
   if (!baseUrl) return undefined;
-  if (provider === "gmail") return `${baseUrl}/oauth/google`;
+  const qs = slackUserId ? `?slackUserId=${encodeURIComponent(slackUserId)}` : "";
+  if (provider === "gmail") return `${baseUrl}/oauth/google${qs}`;
   if (["microsoft", "outlook", "office365", "hotmail", "live"].includes(provider)) {
-    return `${baseUrl}/oauth/microsoft`;
+    return `${baseUrl}/oauth/microsoft${qs}`;
   }
-  return `${baseUrl}/oauth/microsoft`; // fallback
+  return `${baseUrl}/oauth/microsoft${qs}`; // fallback
 };
 
 export function registerActions(slackApp) {
@@ -30,7 +31,8 @@ export function registerActions(slackApp) {
       }
 
       const provider = await detectProvider(email);
-      const oauthUrl = oauthUrlFor(provider);
+      const slackUserId = body.user.id;
+      const oauthUrl = oauthUrlFor(provider, slackUserId);
       if (!oauthUrl) {
         console.error("[view email_submit] missing PUBLIC_BASE_URL or provider unknown", {
           provider,
