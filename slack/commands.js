@@ -4,7 +4,7 @@ import { listImapEmails } from "../providers/imap.js";
 // In-memory store; replace with a real DB in production
 const userMailStore = new Map();
 
-export function saveUserMail(slackUserId, { email, provider, xoauth2 }) {
+export function saveUserMail(slackUserId, email, provider, xoauth2 ) {
     const host = provider === "gmail" ? "imap.gmail.com" : "outlook.office365.com";
     userMailStore.set(slackUserId, { email, host, xoauth2, provider });
 }
