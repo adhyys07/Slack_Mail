@@ -2,6 +2,7 @@ import express from "express";
 import axios from "axios";
 import { saveUser } from "../db/store.js";
 import { slackApp } from "../slack/app.js";
+import { saveUserMail } from "../slack/commands.js";
 
 export const microsoftOAuthRouter = express.Router()
 
@@ -53,6 +54,15 @@ microsoftOAuthRouter.get("/callback", async (req, res) => {
             refresh_token,
             expires_at: Date.now() + expires_in * 1000,
         });
+
+        if (slackUserId) {
+            // Store user mail config for IMAP (/inbox)
+            saveUserMail(slackUserId, {
+                email: undefined, // populate if you fetch from Graph profile
+                provider: "microsoft",
+                xoauth2: access_token,
+            });
+        }
 
         if (slackUserId) {
             const dm = await slackApp.client.conversations.open({ users: slackUserId });

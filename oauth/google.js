@@ -1,6 +1,7 @@
 import express from "express";
 import { google } from "googleapis";
 import { slackApp } from "../slack/app.js";
+import { saveUserMail } from "../slack/commands.js";
 
 export const googleOAuthRouter = express.Router();
 
@@ -24,6 +25,15 @@ googleOAuthRouter.get("/callback", async (req, res) => {
     try {
         const { tokens } = await oauth2Client.getToken(req.query.code);
         console.log(tokens);
+
+        if (slackUserId) {
+            // Store user mail config for IMAP (/inbox)
+            saveUserMail(slackUserId, {
+                email: undefined, // optionally populate from profile if you fetch it
+                provider: "gmail",
+                xoauth2: tokens.access_token,
+            });
+        }
 
         if (slackUserId) {
             const dm = await slackApp.client.conversations.open({ users: slackUserId });

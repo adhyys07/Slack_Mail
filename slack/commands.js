@@ -1,8 +1,16 @@
-import { providerDetectModal } from "./views.js"
-import { listImapEmails } from "../providers/imap.js"
-import { text } from "express";
+import { providerDetectModal } from "./views.js";
+import { listImapEmails } from "../providers/imap.js";
 
-async function getUserImapConfig(slackUserId){
+// In-memory store; replace with a real DB in production
+const userMailStore = new Map();
+
+export function saveUserMail(slackUserId, { email, provider, xoauth2 }) {
+    const host = provider === "gmail" ? "imap.gmail.com" : "outlook.office365.com";
+    userMailStore.set(slackUserId, { email, host, xoauth2, provider });
+}
+
+async function getUserImapConfig(slackUserId) {
+    if (userMailStore.has(slackUserId)) return userMailStore.get(slackUserId);
     return null;
 }
 
