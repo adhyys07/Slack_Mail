@@ -50,7 +50,13 @@ export function registerCommands(slackApp) {
         }
 
         try {
-            const messages = await listImapEmails(cfg);
+            let messages = [];
+            
+            if (cfg.provider === "gmail") {
+                messages = await listGmailEmails(cfg.tokens);
+            } else if (cfg.provider === "microsoft"){
+                messages = await listOutlookEmails(cfg.access_token);
+            }
             const latest = messages.slice(-6).map((m) => {
                 const h = m.parts[0].body;
                 return `• From: ${h.from} | Subject: ${h.subject} | Date: ${h.date}`;

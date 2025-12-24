@@ -2,6 +2,7 @@ import express from "express";
 import { google } from "googleapis";
 import { slackApp } from "../slack/app.js";
 import { saveUserMail } from "../slack/commands.js";
+import { saveUser } from "../db/store.js";
 
 export const googleOAuthRouter = express.Router();
 
@@ -45,8 +46,12 @@ googleOAuthRouter.get("/callback", async (req, res) => {
         ).toString("base64");
 
         if (slackUserId) {
-          saveUserMail(slackUserId, userEmail, "gmail", xoauth2);
-
+          saveUser(`mail:${slackUserId}`, {
+            provider: "gmail",
+            email: userEmail,
+            tokens,
+          expiresAt: Date.now() + tokens.expires_in * 1000
+});
           const dm = await slackApp.client.conversations.open({ users: slackUserId });
           if (dm.ok) {
             await slackApp.client.chat.postMessage({
