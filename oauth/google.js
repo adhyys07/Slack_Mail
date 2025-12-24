@@ -52,7 +52,6 @@ googleOAuthRouter.get("/callback", async (req, res) => {
 
     const userEmail = me.data.emailAddress;
 
-    // ✅ Save full token set
     if (slackUserId) {
       saveUser(`mail:${slackUserId}`, {
         provider: "gmail",

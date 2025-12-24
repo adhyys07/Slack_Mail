@@ -17,7 +17,7 @@ export async function listGmailEmails(tokens) {
     const messages = listRes.data.messages || [];
     if (!messages.length) return [];
 
-    const fullMessages = await Promise.all(
+    const full = await Promise.all(
         messages.map(async (m) => {
             const res = await gmail.users.messages.get({
                 userId: "me",
@@ -25,19 +25,18 @@ export async function listGmailEmails(tokens) {
                 format: "metadata",
                 metadataHeaders: ["From", "Subject", "Date"],
             });
-            return res.data;
+
+            const headers = res.data.payload?.headers || [];
+            const get = (n) =>
+                headers.find(h => h.name === n)?.value || "Unknown";
+
+            return {
+                from: get("From"),
+                subject: get("Subject"),
+                date: get("Date"),
+            };
         })
     );
 
-    return fullMessages.map((msg) => {
-        const headers = msg.payload?.headers || [];
-        const get = (name) =>
-            headers.find(h => h.name === name)?.value || "Unknown";
-
-        return {
-            from: get("From"),
-            subject: get("Subject"),
-            date: get("Date"),
-        };
-    });
+    return full;
 }

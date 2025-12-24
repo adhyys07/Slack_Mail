@@ -2,7 +2,6 @@ import express from "express";
 import axios from "axios";
 import { saveUser } from "../db/store.js";
 import { slackApp } from "../slack/app.js";
-import { saveUserMail } from "../slack/commands.js";
 
 export const microsoftOAuthRouter = express.Router()
 
