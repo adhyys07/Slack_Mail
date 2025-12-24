@@ -51,10 +51,6 @@ export function registerCommands(slackApp) {
                 await client.chat.delete({channel, ts:msg.ts});
             }
 
-            await client.chat.postMessage({
-                channel,
-                text: `Cleared ${botMessages.length} recent bot messages in this conversation.`,
-            });
         }   catch (err){
             console.error("[/clear-bot] error",err);
             await client.chat.postMessage({
