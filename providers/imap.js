@@ -14,8 +14,9 @@ export async function listImapEmails(config) {
     });
     await connection.openBox("INBOX")
     const results = await connection.search(["ALL"],{
-        bodies:["HEADER.FIELD (FROM SUBJECT DATE)"],
+        bodies:["HEADER.FIELDS (FROM SUBJECT DATE)"],
         markSeen: false
     })
-    return results;
+    console.log("[imap] messages found", results.length)
+    return results.slice(-6);
 }
