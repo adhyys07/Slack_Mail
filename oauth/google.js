@@ -12,19 +12,20 @@ const oauth2Client = new google.auth.OAuth2(
 )
 
 googleOAuthRouter.get("/", (req, res) => {
-    const slackUserId = req.query.slackUserId;
-    const url = oauth2Client.generateAuthUrl({
-        access_type:"offline",
-        scope: [
+  const slackUserId = req.query.slackUserId;
+  const url = oauth2Client.generateAuthUrl({
+    access_type: "offline",
+    prompt: "consent",
+    scope: [
       "https://mail.google.com/", // IMAP XOAUTH2
       "https://www.googleapis.com/auth/gmail.readonly",
       "https://www.googleapis.com/auth/userinfo.email",
       "openid",
       "profile",
     ],
-        state: slackUserId || "",
-    });
-    res.redirect(url);
+    state: slackUserId || "",
+  });
+  res.redirect(url);
 });
 
 googleOAuthRouter.get("/callback", async (req, res) => {
@@ -40,20 +41,20 @@ googleOAuthRouter.get("/callback", async (req, res) => {
 
     // Build XOAUTH2 string for IMAP
         const xoauth2 = Buffer.from(
-            `user=${userEmail}\u0001auth=Bearer ${tokens.access_token}\u0001\u0001`
+          `user=${userEmail}\u0001auth=Bearer ${tokens.access_token}\u0001\u0001`
         ).toString("base64");
 
         if (slackUserId) {
-      saveUserMail(slackUserId, userEmail, "gmail", xoauth2);
+          saveUserMail(slackUserId, userEmail, "gmail", xoauth2);
 
-      const dm = await slackApp.client.conversations.open({ users: slackUserId });
-      if (dm.ok) {
-        await slackApp.client.chat.postMessage({
-          channel: dm.channel.id,
-          text: "Google email connected successfully",
-        });
-      }
-    }
+          const dm = await slackApp.client.conversations.open({ users: slackUserId });
+          if (dm.ok) {
+            await slackApp.client.chat.postMessage({
+              channel: dm.channel.id,
+              text: "Google email connected successfully",
+            });
+          }
+        }
 
     res.send("Google E-mail connected successfully !!");
   } catch (err) {

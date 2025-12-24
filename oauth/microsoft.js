@@ -21,7 +21,7 @@ microsoftOAuthRouter.get("/", (req, res) => {
         response_type: "code",
         redirect_uri: REDIRECT_URI,
         response_mode: "query",
-        scope: "offline_access Mail.Read Mail.Send",
+        scope: "offline_access Mail.Read Mail.Send IMAP.AccessAsUser.All",
         state: slackUserId || "",
     });
     res.redirect(`${AUTH_URL}?${params.toString()}`);
@@ -56,15 +56,13 @@ microsoftOAuthRouter.get("/callback", async (req, res) => {
         });
 
         if (slackUserId) {
-            // Store user mail config for IMAP (/inbox)
-            saveUserMail(slackUserId, {
-                email: undefined, // populate if you fetch from Graph profile
-                provider: "microsoft",
-                xoauth2: access_token,
-            });
-        }
+            // Build XOAUTH2 string for IMAP
+            const xoauth2 = Buffer.from(
+                `user=${"unknown"}\u0001auth=Bearer ${access_token}\u0001\u0001`
+            ).toString("base64");
 
-        if (slackUserId) {
+            saveUserMail(slackUserId, "", "microsoft", xoauth2);
+
             const dm = await slackApp.client.conversations.open({ users: slackUserId });
             if (dm.ok) {
                 await slackApp.client.chat.postMessage({
