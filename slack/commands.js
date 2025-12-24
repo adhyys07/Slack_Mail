@@ -1,5 +1,5 @@
 import { providerDetectModal } from "./views.js";
-import { listGmailEmails } from "../mail/gmail.js";
+import { listGmailEmails } from "../providers/gmail.js";
 import { listOutlookEmails } from "../providers/outlook.js";
 import { saveUser, getUser, deleteUser } from "../db/store.js";
 
