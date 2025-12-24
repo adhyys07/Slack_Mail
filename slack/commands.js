@@ -48,7 +48,7 @@ export function registerCommands(slackApp) {
                 .slice(0,20);
             
             for (const msg of botMessages) {
-                await client.chat.delete({channel, ts:messages.ts});
+                await client.chat.delete({channel, ts:msg.ts});
             }
 
             await client.chat.postEphemeral({
