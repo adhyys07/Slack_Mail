@@ -51,14 +51,13 @@ export function registerCommands(slackApp) {
                 await client.chat.delete({channel, ts:msg.ts});
             }
 
-            await client.chat.postEphemeral({
+            await client.chat.postMessage({
                 channel,
-                user:body.user_id,
-                 text: `Cleared ${botMessages.length} recent bot messages in this conversation.`,
+                text: `Cleared ${botMessages.length} recent bot messages in this conversation.`,
             });
         }   catch (err){
             console.error("[/clear-bot] error",err);
-            await client.chat.postEphemeral({
+            await client.chat.postMessage({
                 channel,
                 user:body.user_id,
                 text: "Failed to clear messages. Ensure the app has history + chat:write scopes.",
@@ -73,7 +72,7 @@ export function registerCommands(slackApp) {
 
         const cfg = getUserMail(body.user_id);
         if (!cfg) {
-            await client.chat.postEphemeral({
+            await client.chat.postMessage({
                 channel: body.channel_id,
                 user: body.user_id,
                 text: "You’re not connected. Run `/connect-email` first.",
@@ -91,7 +90,7 @@ export function registerCommands(slackApp) {
             }
 
             if (!emails.length) {
-                await client.chat.postEphemeral({
+                await client.chat.postMessage({
                     channel: body.channel_id,
                     user: body.user_id,
                     text: "📭 No emails found.",
@@ -104,7 +103,7 @@ export function registerCommands(slackApp) {
                     `*${i + 1}.* *${e.subject}*\n_from:_ ${e.from}\n_date:_ ${e.date}`
             ).join("\n\n");
 
-            await client.chat.postEphemeral({
+            await client.chat.postMessage({
                 channel: body.channel_id,
                 user: body.user_id,
                 text,
@@ -112,7 +111,7 @@ export function registerCommands(slackApp) {
 
         } catch (e) {
             err("/inbox", e);
-            await client.chat.postEphemeral({
+            await client.chat.postMessage({
                 channel: body.channel_id,
                 user: body.user_id,
                 text: "Failed to load inbox. Reconnect with /connect-email",
