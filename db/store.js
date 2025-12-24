@@ -1,14 +1,21 @@
-// Simple in-memory store. NOTE: Heroku dynos lose this on restart. Use a real DB for persistence.
-const store = new Map();
+import Redis from "ioredis"
 
-export function saveUser(userId, data) {
-    store.set(userId, data);
+const redis = new Redis(process.env.REDIS_URL)
+
+export async function saveUser(key, value) {
+    await redis.set(
+        key,
+        JSON.stringify(value),
+        "EX",
+        30*24*60*60
+    );
 }
 
-export function getUser(userId) {
-    return store.get(userId);
+export async function getUser(key) {
+    const data = await redis.get(key)
+    return data ? JSON.parse(data): null;
 }
 
-export function deleteUser(userId) {
-    store.delete(userId);
+export async function deleteUser(key) {
+    await redis.del(key);
 }

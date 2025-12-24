@@ -14,6 +14,7 @@
     "googleapis": "^144.0.0",
     "heroku": "^8.7.1",
     "imap-simple": "^5.0.0",
+    "ioredis": "^5.8.2",
     "nodemailer": "^6.9.8",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
