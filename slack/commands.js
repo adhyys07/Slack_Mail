@@ -1,5 +1,6 @@
 import { providerDetectModal } from "./views.js";
-import { listImapEmails } from "../providers/imap.js";
+import { listGmailEmails } from "../mail/gmail.js";
+import { listOutlookEmails } from "../providers/outlook.js";
 import { saveUser, getUser, deleteUser } from "../db/store.js";
 
 const log = (...args) => console.log("[commands]", ...args);
