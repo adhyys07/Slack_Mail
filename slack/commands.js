@@ -6,28 +6,29 @@ import { saveUser, getUser, deleteUser } from "../db/store.js";
 const log = (...args) => console.log("[commands]", ...args);
 const logErr = (...args) => console.error("[commands]", ...args);
 
-export function saveUserMail(slackUserId, email, provider, xoauth2) {
-    const host = provider === "gmail" ? "imap.gmail.com" : "outlook.office365.com";
-    const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
-    saveUser(`mail:${slackUserId}`, { email, host, xoauth2, provider, expiresAt });
-    log("saved mail config", { slackUserId, provider, host, expiresAt });
-}
-
-async function getUserImapConfig(slackUserId) {
+// ✅ Unified mail config fetch
+async function getUserMailConfig(slackUserId) {
     const cfg = getUser(`mail:${slackUserId}`) ?? null;
+
     if (!cfg) return null;
+
     if (cfg.expiresAt && cfg.expiresAt < Date.now()) {
         deleteUser(`mail:${slackUserId}`);
         log("mail config expired", { slackUserId });
         return null;
     }
+
     return cfg;
 }
 
 export function registerCommands(slackApp) {
+
+    // =======================
+    // /connect-email
+    // =======================
     slackApp.command("/connect-email", async ({ ack, body, client }) => {
-        log("/connect-email", { user: body.user_id });
         await ack();
+        log("/connect-email", { user: body.user_id });
 
         await client.views.open({
             trigger_id: body.trigger_id,
@@ -35,12 +36,17 @@ export function registerCommands(slackApp) {
         });
     });
 
+    // =======================
+    // /inbox
+    // =======================
     slackApp.command("/inbox", async ({ ack, body, client }) => {
         await ack();
+
         const slackUserId = body.user_id;
         log("/inbox", { user: slackUserId });
 
-        const cfg = await getUserImapConfig(slackUserId);
+        const cfg = await getUserMailConfig(slackUserId);
+
         if (!cfg) {
             await client.chat.postEphemeral({
                 channel: body.channel_id,
@@ -52,24 +58,35 @@ export function registerCommands(slackApp) {
 
         try {
             let messages = [];
-            
+
             if (cfg.provider === "gmail") {
                 messages = await listGmailEmails(cfg.tokens);
-            } else if (cfg.provider === "microsoft"){
+            } else if (cfg.provider === "microsoft") {
                 messages = await listOutlookEmails(cfg.access_token);
             }
-            const latest = messages.slice(-6).map((m) => {
-                const h = m.parts[0].body;
-                return `• From: ${h.from} | Subject: ${h.subject} | Date: ${h.date}`;
-            });
+
+            if (!messages.length) {
+                await client.chat.postEphemeral({
+                    channel: body.channel_id,
+                    user: slackUserId,
+                    text: "📭 No emails found.",
+                });
+                return;
+            }
+
+            const formatted = messages.map((m, i) =>
+                `*${i + 1}.* *${m.subject}*\n_from:_ ${m.from}\n_date:_ ${m.date}`
+            );
 
             await client.chat.postEphemeral({
                 channel: body.channel_id,
                 user: slackUserId,
-                text: latest.length ? latest.join("\n") : "No unseen messages.",
+                text: formatted.join("\n\n"),
             });
+
         } catch (err) {
             logErr("[/inbox] error", err);
+
             await client.chat.postEphemeral({
                 channel: body.channel_id,
                 user: slackUserId,
