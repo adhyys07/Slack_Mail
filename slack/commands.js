@@ -2,6 +2,7 @@ import { providerDetectModal } from "./views.js";
 import { listGmailEmails } from "../providers/gmail.js";
 import { listOutlookEmails } from "../providers/outlook.js";
 import { getUser, deleteUser } from "../db/store.js";
+import { use } from "react";
 
 const log = (...a) => console.log("[commands]", ...a);
 const err = (...a) => console.error("[commands]", ...a);
@@ -27,6 +28,44 @@ export function registerCommands(slackApp) {
             view: providerDetectModal(),
         });
     });
+
+    slackApp.command("/clear-bot", async({ack,body,client,context}) => {
+        await ack();
+        const channel = body.channel_id;
+
+        try{
+            const botUserId =
+                context.botUserId ||
+                (await client.auth.test()).user_id;
+            
+            const history = await client.conversations.history({
+                channel,
+                limit:200,
+            });
+
+            const botMessages = (history.messages || [])
+                .filter((m)=> m.user === botUserId && m.ts)
+                .slice(0,20);
+            
+            for (const msg of botMessages) {
+                await client.chat.delete({channel, ts:messages.ts});
+            }
+
+            await client.chat.postEphemeral({
+                channel,
+                user:body.user_id,
+                 text: `Cleared ${botMessages.length} recent bot messages in this conversation.`,
+            });
+        }   catch (err){
+            console.error("[/clear-bot] error",err);
+            await client.chat.postEphemeral({
+                channel,
+                user:body.user_id,
+                text: "Failed to clear messages. Ensure the app has history + chat:write scopes.",
+            })
+        }
+    });
+
 
     // /inbox
     slackApp.command("/inbox", async ({ ack, body, client }) => {
