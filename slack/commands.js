@@ -18,23 +18,33 @@ export function registerCommands(slackApp) {
   slackApp.command("/inbox", async ({ ack, body, client }) => {
     await ack();
 
-    const cfg = getUserMail(body.user_id);
-    if (!cfg) {
-      await client.chat.postMessage({
-        channel: body.channel_id,
-        text: "You’re not connected. Run `/connect-email` first.",
-      });
-      return;
-    }
+    // Optional UX improvement
+    await client.chat.postEphemeral({
+      channel: body.channel_id,
+      user: body.user_id,
+      text: "📨 Fetching your latest emails…",
+    });
 
     try {
+      const cfg = getUserMail(body.user_id);
+      if (!cfg) {
+        await client.chat.postEphemeral({
+          channel: body.channel_id,
+          user: body.user_id,
+          text: "You’re not connected. Run `/connect-email` first.",
+        });
+        return;
+      }
+
       let emails = [];
 
       if (cfg.provider === "gmail") {
         const freshTokens = await getValidGoogleTokens(cfg.tokens);
 
-        // 🔑 SAVE refreshed token
-        if (freshTokens.access_token !== cfg.tokens.access_token) {
+        if (
+          freshTokens.access_token !== cfg.tokens.access_token &&
+          freshTokens.expiry_date
+        ) {
           await saveUser(`mail:${body.user_id}`, {
             ...cfg,
             tokens: freshTokens,
@@ -46,8 +56,9 @@ export function registerCommands(slackApp) {
       }
 
       if (!emails.length) {
-        await client.chat.postMessage({
+        await client.chat.postEphemeral({
           channel: body.channel_id,
+          user: body.user_id,
           text: "📭 No emails found.",
         });
         return;
@@ -67,8 +78,9 @@ export function registerCommands(slackApp) {
 
     } catch (err) {
       console.error("[/inbox]", err);
-      await client.chat.postMessage({
+      await client.chat.postEphemeral({
         channel: body.channel_id,
+        user: body.user_id,
         text: "❌ Failed to load inbox. Try reconnecting with `/connect-email`.",
       });
     }
