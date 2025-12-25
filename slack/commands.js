@@ -84,7 +84,7 @@ export function registerCommands(slackApp) {
           });
         }
 
-        emails = await listGmailEmails(freshTokens);
+        emails = await listGmailEmails(freshTokens,10);
       }
 
       else if (cfg.provider === "microsoft") {
