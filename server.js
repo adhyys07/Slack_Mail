@@ -12,8 +12,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// Mount Bolt receiver at root; it defines /slack/events internally
-app.use(slackReceiver.router);
+// Mount Bolt receiver explicitly at /slack/events
+app.use("/slack/events", slackReceiver.router);
 
 // Body parser for your routes
 app.use(express.json());
