@@ -6,36 +6,35 @@ export async function listGmailEmails(tokens, limit = 10) {
 
   const gmail = google.gmail({ version: "v1", auth });
 
-  // STEP 1: List messages (IDs only)
+  // STEP 1: Get message IDs (no filters)
   const listRes = await gmail.users.messages.list({
     userId: "me",
     maxResults: limit,
   });
 
-  if (!listRes.data.messages || listRes.data.messages.length === 0) {
-    return [];
-  }
+  console.log("[GMAIL] LIST:", listRes.data);
+
+  if (!listRes.data.messages) return [];
 
   const emails = [];
 
-  // STEP 2: Fetch metadata for each message
+  // STEP 2: Fetch headers for each email
   for (const msg of listRes.data.messages) {
-    const detail = await gmail.users.messages.get({
+    const msgRes = await gmail.users.messages.get({
       userId: "me",
       id: msg.id,
       format: "metadata",
       metadataHeaders: ["From", "Subject", "Date"],
     });
 
-    const headers = detail.data.payload.headers || [];
-
-    const getHeader = (name) =>
-      headers.find((h) => h.name === name)?.value || "(unknown)";
+    const headers = msgRes.data.payload.headers;
+    const get = (name) =>
+      headers.find((h) => h.name === name)?.value || "";
 
     emails.push({
-      subject: getHeader("Subject"),
-      from: getHeader("From"),
-      date: getHeader("Date"),
+      subject: get("Subject"),
+      from: get("From"),
+      date: get("Date"),
     });
   }
 
