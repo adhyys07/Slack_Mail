@@ -2,69 +2,49 @@ import { listGmailEmails } from "../providers/gmail.js";
 import { getValidGoogleTokens } from "../providers/googleTokens.js";
 import { getUser, saveUser, deleteUser } from "../db/store.js";
 
-const log = (...a) => console.log("[commands]", ...a);
-const error = (...a) => console.error("[commands]", ...a);
-
-// Load stored user config
-function getUserMail(slackUserId) {
-  const cfg = getUser(`mail:${slackUserId}`);
-  if (!cfg) return null;
-
-  if (cfg.expiresAt && cfg.expiresAt < Date.now()) {
-    deleteUser(`mail:${slackUserId}`);
-    return null;
-  }
-
-  return cfg;
-}
-
 export function registerCommands(slackApp) {
 
-  /* ======================
-     /inbox
-     ====================== */
   slackApp.command("/inbox", async ({ ack, body, client }) => {
-    await ack(); // ✅ MUST ACK FIRST
+    await ack(); // ✅ MUST be first
 
     const channel = body.channel_id;
     const userId = body.user_id;
 
-    // Immediate feedback
     await client.chat.postMessage({
       channel,
       text: "📨 Fetching your latest emails…",
     });
 
-    const cfg = getUserMail(userId);
+    const cfg = getUser(`mail:${userId}`);
     if (!cfg) {
       await client.chat.postMessage({
         channel,
-        text: "❌ You are not connected. Run `/connect-email` first.",
+        text: "❌ Run `/connect-email` first.",
       });
       return;
     }
 
     try {
-      let emails = [];
+      let tokens = cfg.tokens;
 
-      // ---------- GMAIL ----------
+      // 🔁 Refresh Google tokens if expired
       if (cfg.provider === "gmail") {
         const freshTokens = await getValidGoogleTokens(cfg.tokens);
 
-        // Save refreshed token if changed
         if (freshTokens.access_token !== cfg.tokens.access_token) {
-          await saveUser(`mail:${userId}`, {
+          saveUser(`mail:${userId}`, {
             ...cfg,
             tokens: freshTokens,
             expiresAt: freshTokens.expiry_date,
           });
         }
 
-        emails = await listGmailEmails(freshTokens, 10);
+        tokens = freshTokens;
       }
 
-      // ---------- RESULT ----------
-      if (!emails || emails.length === 0) {
+      const emails = await listGmailEmails(tokens, 10);
+
+      if (!emails.length) {
         await client.chat.postMessage({
           channel,
           text: "📭 No emails found.",
@@ -72,26 +52,20 @@ export function registerCommands(slackApp) {
         return;
       }
 
-      const formatted = emails
-        .map(
-          (e, i) =>
-            `*${i + 1}. ${e.subject || "(No Subject)"}*\n` +
-            `_From:_ ${e.from || "Unknown"}\n` +
-            `_Date:_ ${e.date || "Unknown"}`
-        )
-        .join("\n\n");
+      const text = emails.map(
+        (e, i) =>
+          `*${i + 1}. ${e.subject || "(No Subject)"}*\n` +
+          `_From:_ ${e.from}\n` +
+          `_Date:_ ${e.date}`
+      ).join("\n\n");
 
-      await client.chat.postMessage({
-        channel,
-        text: formatted,
-      });
+      await client.chat.postMessage({ channel, text });
 
     } catch (err) {
-      error("Inbox error:", err);
-
+      console.error("[/inbox error]", err);
       await client.chat.postMessage({
         channel,
-        text: "❌ Failed to load inbox. Please reconnect using `/connect-email`.",
+        text: "❌ Failed to load inbox. Reconnect using `/connect-email`.",
       });
     }
   });

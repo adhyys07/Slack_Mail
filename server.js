@@ -1,31 +1,19 @@
 import express from "express";
-import dotenv from "dotenv";
-dotenv.config();
+import { slackApp } from "./slack/app.js";
 import { googleOAuthRouter } from "./oauth/google.js";
-import { microsoftOAuthRouter } from "./oauth/microsoft.js";
-import { slackReceiver } from "./slack/app.js";
 
 const app = express();
 
-app.use((req, res, next) => {
-  console.log("INCOMING:", req.method, req.path);
-  next();
-});
+// 🚨 Bolt MUST be first
+app.use("/slack/events", slackApp.receiver.app);
 
-// Mount Bolt receiver explicitly at /slack/events
-app.use("/slack/events", slackReceiver.app);
-
-// Body parser for your routes
-app.use(express.json());
+// OAuth routes AFTER Bolt
 app.use("/oauth/google", googleOAuthRouter);
-app.use("/oauth/microsoft", microsoftOAuthRouter);
 
-app.use((err, req, res, next) => {
-  console.error("ERR:", err);
-  res.status(500).send("Server error");
-});
+// Other routes
+app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log("Server running on", PORT);
 });
