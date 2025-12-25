@@ -38,7 +38,7 @@ export function registerCommands(slackApp) {
     await ack();
 
     // UX: instant feedback
-    await client.chat.postEphemeral({
+    await client.chat.postMessage({
       channel: body.channel_id,
       user: body.user_id,
       text: "📨 Fetching your latest emails…",
@@ -47,7 +47,7 @@ export function registerCommands(slackApp) {
     try {
       const cfg = getUserMail(body.user_id);
       if (!cfg) {
-        await client.chat.postEphemeral({
+        await client.chat.postMessage({
           channel: body.channel_id,
           user: body.user_id,
           text: "You’re not connected. Run `/connect-email` first.",
@@ -77,7 +77,7 @@ export function registerCommands(slackApp) {
       }
 
       if (!emails.length) {
-        await client.chat.postEphemeral({
+        await client.chat.postMessage({
           channel: body.channel_id,
           user: body.user_id,
           text: "📭 No emails found.",
@@ -100,7 +100,7 @@ export function registerCommands(slackApp) {
 
     } catch (err) {
       console.error("[/inbox]", err);
-      await client.chat.postEphemeral({
+      await client.chat.postMessage({
         channel: body.channel_id,
         user: body.user_id,
         text: "❌ Failed to load inbox. Try reconnecting with `/connect-email`.",
@@ -135,7 +135,7 @@ export function registerCommands(slackApp) {
 
     } catch (err) {
       console.error("[/clear-bot]", err);
-      await client.chat.postEphemeral({
+      await client.chat.postMessage({
         channel: body.channel_id,
         user: body.user_id,
         text: "Failed to clear messages. Check scopes.",
