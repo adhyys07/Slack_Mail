@@ -9,6 +9,7 @@ export async function getValidGoogleTokens(tokens) {
 
   client.setCredentials(tokens);
 
+  // Token expired → refresh
   if (tokens.expiry_date && tokens.expiry_date < Date.now()) {
     const { credentials } = await client.refreshAccessToken();
     return credentials;
