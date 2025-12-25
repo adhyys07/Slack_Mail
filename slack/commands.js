@@ -1,15 +1,14 @@
 import { listGmailEmails } from "../providers/gmail.js";
 import { getValidGoogleTokens } from "../providers/googleTokens.js";
 import { getUser, saveUser, deleteUser } from "../db/store.js";
-import { providerDetectModal } from "./views.js";
 
-/* ------------------ helpers ------------------ */
+const log = (...a) => console.log("[commands]", ...a);
+const err = (...a) => console.error("[commands]", ...a);
 
 function getUserMail(slackUserId) {
   const cfg = getUser(`mail:${slackUserId}`);
   if (!cfg) return null;
 
-  // Token hard-expired → clear
   if (cfg.expiresAt && cfg.expiresAt < Date.now()) {
     deleteUser(`mail:${slackUserId}`);
     return null;
@@ -18,55 +17,45 @@ function getUserMail(slackUserId) {
   return cfg;
 }
 
-/* ------------------ commands ------------------ */
-
 export function registerCommands(slackApp) {
 
-  /* ---------- /connect-email ---------- */
   slackApp.command("/connect-email", async ({ ack, body, client }) => {
-    await ack(); // MUST be immediate
+    await ack(); // ✅ MUST ACK FAST
 
-    await client.views.open({
-      trigger_id: body.trigger_id,
-      view: providerDetectModal(),
+    await client.chat.postMessage({
+      channel: body.channel_id,
+      text: "🔗 Please use the button sent earlier to connect your email.",
     });
   });
 
-  /* ---------- /inbox ---------- */
   slackApp.command("/inbox", async ({ ack, body, client }) => {
-    // ✅ ACK FIRST (prevents 3s timeout)
     await ack();
 
-    // UX: instant feedback
+    const channel = body.channel_id;
+    const userId = body.user_id;
+
     await client.chat.postMessage({
-      channel: body.channel_id,
-      user: body.user_id,
+      channel,
       text: "📨 Fetching your latest emails…",
     });
 
-    try {
-      const cfg = getUserMail(body.user_id);
-      if (!cfg) {
-        await client.chat.postMessage({
-          channel: body.channel_id,
-          user: body.user_id,
-          text: "You’re not connected. Run `/connect-email` first.",
-        });
-        return;
-      }
+    const cfg = getUserMail(userId);
+    if (!cfg) {
+      await client.chat.postMessage({
+        channel,
+        text: "❌ You are not connected. Run `/connect-email` first.",
+      });
+      return;
+    }
 
+    try {
       let emails = [];
 
-      /* ---------- Gmail ---------- */
       if (cfg.provider === "gmail") {
         const freshTokens = await getValidGoogleTokens(cfg.tokens);
 
-        // Persist refreshed token
-        if (
-          freshTokens.access_token !== cfg.tokens.access_token &&
-          freshTokens.expiry_date
-        ) {
-          await saveUser(`mail:${body.user_id}`, {
+        if (freshTokens.access_token !== cfg.tokens.access_token) {
+          await saveUser(`mail:${userId}`, {
             ...cfg,
             tokens: freshTokens,
             expiresAt: freshTokens.expiry_date,
@@ -76,70 +65,65 @@ export function registerCommands(slackApp) {
         emails = await listGmailEmails(freshTokens, 10);
       }
 
-      if (!emails.length) {
+      if (!emails || emails.length === 0) {
         await client.chat.postMessage({
-          channel: body.channel_id,
-          user: body.user_id,
+          channel,
           text: "📭 No emails found.",
         });
         return;
       }
 
-      // Format output
-      const text = emails
+      const formatted = emails
         .map(
           (e, i) =>
-            `*${i + 1}. ${e.subject}*\n_from:_ ${e.from}\n_date:_ ${e.date}`
+            `*${i + 1}. ${e.subject || "(No subject)"}*\n` +
+            `_From:_ ${e.from || "Unknown"}\n` +
+            `_Date:_ ${e.date || "Unknown"}`
         )
         .join("\n\n");
 
       await client.chat.postMessage({
-        channel: body.channel_id,
-        text,
+        channel,
+        text: formatted,
       });
 
-    } catch (err) {
-      console.error("[/inbox]", err);
+    } catch (e) {
+      err("/inbox failed", e);
+
       await client.chat.postMessage({
-        channel: body.channel_id,
-        user: body.user_id,
-        text: "❌ Failed to load inbox. Try reconnecting with `/connect-email`.",
+        channel,
+        text: "❌ Failed to load inbox. Please reconnect using `/connect-email`.",
       });
     }
   });
 
-  /* ---------- /clear-bot (optional utility) ---------- */
   slackApp.command("/clear-bot", async ({ ack, body, client, context }) => {
     await ack();
 
     try {
+      const channel = body.channel_id;
       const botUserId =
-        context.botUserId ||
-        (await client.auth.test()).user_id;
+        context.botUserId || (await client.auth.test()).user_id;
 
       const history = await client.conversations.history({
-        channel: body.channel_id,
-        limit: 200,
+        channel,
+        limit: 100,
       });
 
-      const botMessages = (history.messages || [])
-        .filter((m) => m.user === botUserId && m.ts)
-        .slice(0, 20);
+      const botMessages = (history.messages || []).filter(
+        (m) => m.user === botUserId && m.ts
+      );
 
       for (const msg of botMessages) {
-        await client.chat.delete({
-          channel: body.channel_id,
-          ts: msg.ts,
-        });
+        await client.chat.delete({ channel, ts: msg.ts });
       }
 
-    } catch (err) {
-      console.error("[/clear-bot]", err);
       await client.chat.postMessage({
-        channel: body.channel_id,
-        user: body.user_id,
-        text: "Failed to clear messages. Check scopes.",
+        channel,
+        text: "🧹 Bot messages cleared.",
       });
+    } catch (e) {
+      err("/clear-bot failed", e);
     }
   });
 }
