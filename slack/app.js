@@ -1,7 +1,7 @@
-import { App, ExpressReceiver } from "@slack/bolt";
-import { registerCommands } from "./commands.js";
+const { App, ExpressReceiver } = require("@slack/bolt");
+const { registerCommands } = require("./commands");
 
-export function initSlack(expressApp) {
+function initSlack(expressApp) {
   const receiver = new ExpressReceiver({
     signingSecret: process.env.SLACK_SIGNING_SECRET,
   });
@@ -11,11 +11,12 @@ export function initSlack(expressApp) {
     receiver,
   });
 
-  // ✅ Commands live ONLY in commands.js
   registerCommands(slackApp);
 
-  // Mount Slack events
+  // Mount Slack events on the shared Express instance
   expressApp.use("/slack/events", receiver.app);
 
   console.log("⚡ Slack initialized");
 }
+
+module.exports = { initSlack };
