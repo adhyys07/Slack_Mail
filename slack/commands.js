@@ -1,7 +1,6 @@
-export function registerCommands(app) {
-  /* ---------------- /connect-email ---------------- */
+function registerCommands(app) {
   app.command("/connect-email", async ({ ack, command, respond }) => {
-    await ack(); // 🚨 ALWAYS FIRST
+    await ack();
 
     const authUrl = `${process.env.BASE_URL}/auth/google?user=${command.user_id}`;
 
@@ -12,7 +11,7 @@ export function registerCommands(app) {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: "🔐 Click below to securely connect your Gmail account.",
+            text: "🔐 Click below to connect your Gmail account.",
           },
         },
         {
@@ -20,10 +19,7 @@ export function registerCommands(app) {
           elements: [
             {
               type: "button",
-              text: {
-                type: "plain_text",
-                text: "Connect Gmail",
-              },
+              text: { type: "plain_text", text: "Connect Gmail" },
               url: authUrl,
             },
           ],
@@ -32,7 +28,6 @@ export function registerCommands(app) {
     });
   });
 
-  /* ---------------- /clear-bot ---------------- */
   app.command("/clear-bot", async ({ ack, command, client }) => {
     await ack();
 
@@ -51,7 +46,9 @@ export function registerCommands(app) {
         }
       }
     } catch (err) {
-      console.error("❌ clear-bot error:", err);
+      console.error("clear-bot error:", err);
     }
   });
 }
+
+module.exports = { registerCommands };

@@ -1,5 +1,5 @@
-import { google } from "googleapis";
-import fs from "fs";
+const { google } = require("googleapis");
+const fs = require("fs");
 
 const DB_PATH = "./db/tokens.json";
 
@@ -15,7 +15,7 @@ function saveTokens(userId, tokens) {
   fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 }
 
-export function initGoogleOAuth(app) {
+function initGoogleOAuth(app) {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
@@ -38,10 +38,12 @@ export function initGoogleOAuth(app) {
       const { tokens } = await oauth2Client.getToken(code);
       saveTokens(state, tokens);
 
-      res.send("✅ Gmail connected successfully. You may return to Slack.");
+      res.send("✅ Gmail connected successfully. Return to Slack.");
     } catch (err) {
       console.error(err);
       res.status(500).send("❌ OAuth failed");
     }
   });
 }
+
+module.exports = { initGoogleOAuth };

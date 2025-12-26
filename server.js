@@ -1,19 +1,15 @@
-import express from "express";
-import dotenv from "dotenv";
-import { initSlack } from "./slack/app.js";
-import { initGoogleOAuth } from "./oauth/google.js";
+const express = require("express");
+const dotenv = require("dotenv");
+const { initSlack } = require("./slack/app");
+const { initGoogleOAuth } = require("./oauth/google.js");
 
 dotenv.config();
 
 const app = express();
 
-// Slack (creates App + registers commands)
 initSlack(app);
-
-// Google OAuth routes
 initGoogleOAuth(app);
 
-// Health check
 app.get("/", (_, res) => {
   res.send("✅ Server running");
 });

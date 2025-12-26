@@ -1,22 +1,15 @@
 {
-  "name": "slack-email-bot",
+  "name": "slack-mail-bot",
   "version": "1.0.0",
+  "type": "commonjs",
   "main": "server.js",
-  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "@slack/bolt": "^3.18.0",
-    "axios": "^1.6.2",
-    "dotenv": "^16.3.1",
+    "@slack/bolt": "^3.15.0",
+    "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "googleapis": "^144.0.0",
-    "heroku": "^8.7.1",
-    "imap-simple": "^5.0.0",
-    "ioredis": "^5.8.2",
-    "nodemailer": "^6.9.8",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "googleapis": "^140.0.0"
   }
 }
