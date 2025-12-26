@@ -5,7 +5,7 @@ import { getUser, saveUser, deleteUser } from "../db/store.js";
 export function registerCommands(slackApp) {
 
   slackApp.command("/inbox", async ({ ack, body, client }) => {
-    await ack(); // ✅ MUST be first
+    await ack();
 
     const channel = body.channel_id;
     const userId = body.user_id;
