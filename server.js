@@ -1,19 +1,32 @@
 import express from "express";
-import { slackApp } from "./slack/app.js";
-import { googleOAuthRouter } from "./oauth/google.js";
+import { google } from "googleapis";
+import { saveTokens } from "./providers/googleTokens.js";
 
 const app = express();
 
-// 🚨 Bolt MUST be first
-app.use("/slack/events", slackApp.receiver.app);
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI
+);
 
-// OAuth routes AFTER Bolt
-app.use("/oauth/google", googleOAuthRouter);
+app.get("/auth/google", (req, res) => {
+  const url = oauth2Client.generateAuthUrl({
+    access_type: "offline",
+    scope: ["https://www.googleapis.com/auth/gmail.readonly"],
+    state: req.query.user,
+  });
 
-// Other routes
-app.use(express.json());
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("Server running on", PORT);
+  res.redirect(url);
 });
+
+app.get("/auth/google/callback", async (req, res) => {
+  const { code, state } = req.query;
+
+  const { tokens } = await oauth2Client.getToken(code);
+  await saveTokens(state, tokens);
+
+  res.send("✅ Gmail connected. You can return to Slack.");
+});
+
+app.listen(4000, () => console.log("OAuth server running"));

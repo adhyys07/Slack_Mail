@@ -1,40 +1,38 @@
 import { google } from "googleapis";
+import { getGoogleTokens, deleteTokens } from "./googleTokens.js";
 
-export async function listGmailEmails(tokens, limit = 10) {
-  const auth = new google.auth.OAuth2();
-  auth.setCredentials(tokens);
+export async function fetchGmail(userId) {
+  const auth = await getGoogleTokens(userId);
 
   const gmail = google.gmail({ version: "v1", auth });
 
-  const listRes = await gmail.users.messages.list({
+  const list = await gmail.users.messages.list({
     userId: "me",
-    maxResults: limit,
+    q: "is:unread",
+    maxResults: 5,
   });
 
-  console.log("[GMAIL LIST]", listRes.data);
-
-  if (!listRes.data.messages) return [];
+  if (!list.data.messages) return [];
 
   const emails = [];
 
-  for (const msg of listRes.data.messages) {
-    const res = await gmail.users.messages.get({
+  for (const msg of list.data.messages) {
+    const data = await gmail.users.messages.get({
       userId: "me",
       id: msg.id,
-      format: "metadata",
-      metadataHeaders: ["From", "Subject", "Date"],
     });
 
-    const headers = res.data.payload.headers;
-    const get = (name) =>
-      headers.find((h) => h.name === name)?.value || "";
+    const headers = data.data.payload.headers;
 
     emails.push({
-      subject: get("Subject"),
-      from: get("From"),
-      date: get("Date"),
+      subject: headers.find(h => h.name === "Subject")?.value || "No subject",
+      from: headers.find(h => h.name === "From")?.value || "Unknown",
     });
   }
 
   return emails;
+}
+
+export async function disconnectGmail(userId) {
+  await deleteTokens(userId);
 }

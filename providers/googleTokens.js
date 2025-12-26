@@ -1,19 +1,34 @@
+import fs from "fs";
+import path from "path";
 import { google } from "googleapis";
 
-export async function getValidGoogleTokens(tokens) {
-  const client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT
-  );
+const TOKEN_DIR = "./tokens";
 
-  client.setCredentials(tokens);
+export async function getGoogleTokens(userId) {
+  const tokenPath = path.join(TOKEN_DIR, `${userId}.json`);
 
-  // Token expired → refresh
-  if (tokens.expiry_date && tokens.expiry_date <= Date.now()) {
-    const { credentials } = await client.refreshAccessToken();
-    return credentials;
+  if (!fs.existsSync(tokenPath)) {
+    throw new Error("No tokens");
   }
 
-  return tokens;
+  const tokens = JSON.parse(fs.readFileSync(tokenPath));
+
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+
+  oauth2Client.setCredentials(tokens);
+  return oauth2Client;
+}
+
+export async function saveTokens(userId, tokens) {
+  if (!fs.existsSync(TOKEN_DIR)) fs.mkdirSync(TOKEN_DIR);
+  fs.writeFileSync(`${TOKEN_DIR}/${userId}.json`, JSON.stringify(tokens));
+}
+
+export async function deleteTokens(userId) {
+  const file = `${TOKEN_DIR}/${userId}.json`;
+  if (fs.existsSync(file)) fs.unlinkSync(file);
 }

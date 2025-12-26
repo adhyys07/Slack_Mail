@@ -1,26 +1,15 @@
-import "dotenv/config";
-import pkg from "@slack/bolt";
-const { App, ExpressReceiver, LogLevel } = pkg;
+import { App } from "@slack/bolt";
+import dotenv from "dotenv";
 
-const receiver = new ExpressReceiver({
-  signingSecret: process.env.SLACK_SIGNING_SECRET,
-});
+dotenv.config();
 
-export const slackApp = new App({
+export const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
-  receiver,
-  logLevel: LogLevel.DEBUG,
-  processBeforeResponse: true,
+  signingSecret: process.env.SLACK_SIGNING_SECRET,
+  port: process.env.PORT || 3000,
 });
 
-export const slackReceiver = receiver;
-
-import { registerCommands } from "./commands.js";
-import { registerActions } from "./actions.js";
-
-registerCommands(slackApp);
-registerActions(slackApp);
-
-slackApp.error((err) => {
-  console.error("[bolt error]", err);
-});
+(async () => {
+  await app.start();
+  console.log("⚡ Slack Mail Bot running");
+})();
