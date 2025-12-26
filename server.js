@@ -1,51 +1,32 @@
 import express from "express";
 import dotenv from "dotenv";
-import { App } from "@slack/bolt";
-import { google } from "googleapis";
-import { saveTokens } from "./providers/googleTokens.js";
-
 dotenv.config();
 
-const expressApp = express();
+import { slackApp, slackReceiver } from "./slack/app.js";
+import { googleOAuthRouter } from "./oauth/google.js";
+import { microsoftOAuthRouter } from "./oauth/microsoft.js";
 
-/* ---------------- SLACK BOLT ---------------- */
-const slackApp = new App({
-  token: process.env.SLACK_BOT_TOKEN,
-  signingSecret: process.env.SLACK_SIGNING_SECRET,
-  receiver: undefined, // IMPORTANT
+const app = express();
+
+app.use((req, res, next) => {
+  console.log("INCOMING:", req.method, req.path);
+  next();
 });
 
-await slackApp.init();
+// Mount Slack receiver at root; it registers /slack/events internally
+app.use(slackReceiver.app);
 
-/* Mount Slack on Express */
-expressApp.use("/slack/events", slackApp.receiver.app);
+// Body parser for your OAuth routes
+app.use(express.json());
+app.use("/oauth/google", googleOAuthRouter);
+app.use("/oauth/microsoft", microsoftOAuthRouter);
 
-/* ---------------- GOOGLE OAUTH ---------------- */
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
-);
-
-expressApp.get("/auth/google", (req, res) => {
-  const url = oauth2Client.generateAuthUrl({
-    access_type: "offline",
-    scope: ["https://www.googleapis.com/auth/gmail.readonly"],
-    state: req.query.user,
-  });
-  res.redirect(url);
+app.use((err, req, res, next) => {
+  console.error("ERR:", err);
+  res.status(500).send("Server error");
 });
 
-expressApp.get("/auth/google/callback", async (req, res) => {
-  const { code, state } = req.query;
-  const { tokens } = await oauth2Client.getToken(code);
-  await saveTokens(state, tokens);
-  res.send("✅ Gmail connected. Return to Slack.");
-});
-
-/* ---------------- START SERVER ---------------- */
 const PORT = process.env.PORT || 3000;
-
-expressApp.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
