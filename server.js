@@ -1,32 +1,24 @@
 import express from "express";
 import dotenv from "dotenv";
-dotenv.config();
+import { initSlack } from "./slack/app.js";
+import { initGoogleOAuth } from "./oauth/google.js";
 
-import { slackApp, slackReceiver } from "./slack/app.js";
-import { googleOAuthRouter } from "./oauth/google.js";
-import { microsoftOAuthRouter } from "./oauth/microsoft.js";
+dotenv.config();
 
 const app = express();
 
-app.use((req, res, next) => {
-  console.log("INCOMING:", req.method, req.path);
-  next();
-});
+// Slack (creates App + registers commands)
+initSlack(app);
 
-// Mount Slack receiver at root; it registers /slack/events internally
-app.use(slackReceiver.app);
+// Google OAuth routes
+initGoogleOAuth(app);
 
-// Body parser for your OAuth routes
-app.use(express.json());
-app.use("/oauth/google", googleOAuthRouter);
-app.use("/oauth/microsoft", microsoftOAuthRouter);
-
-app.use((err, req, res, next) => {
-  console.error("ERR:", err);
-  res.status(500).send("Server error");
+// Health check
+app.get("/", (_, res) => {
+  res.send("✅ Server running");
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`🚀 Server listening on ${PORT}`);
 });

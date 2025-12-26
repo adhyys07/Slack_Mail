@@ -1,26 +1,21 @@
-import "dotenv/config";
-import pkg from "@slack/bolt";
-const { App, ExpressReceiver, LogLevel } = pkg;
-
-const receiver = new ExpressReceiver({
-  signingSecret: process.env.SLACK_SIGNING_SECRET,
-  processBeforeResponse: true,
-});
-
-export const slackApp = new App({
-  token: process.env.SLACK_BOT_TOKEN,
-  receiver,
-  logLevel: LogLevel.DEBUG,
-});
-
-export const slackReceiver = receiver;
-
+import { App, ExpressReceiver } from "@slack/bolt";
 import { registerCommands } from "./commands.js";
-import { registerActions } from "./actions.js";
 
-registerCommands(slackApp);
-registerActions(slackApp);
+export function initSlack(expressApp) {
+  const receiver = new ExpressReceiver({
+    signingSecret: process.env.SLACK_SIGNING_SECRET,
+  });
 
-slackApp.error((err) => {
-  console.error("[bolt error]", err);
-});
+  const slackApp = new App({
+    token: process.env.SLACK_BOT_TOKEN,
+    receiver,
+  });
+
+  // ✅ Commands live ONLY in commands.js
+  registerCommands(slackApp);
+
+  // Mount Slack events
+  expressApp.use("/slack/events", receiver.app);
+
+  console.log("⚡ Slack initialized");
+}

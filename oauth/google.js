@@ -1,56 +1,47 @@
-import express from "express";
 import { google } from "googleapis";
-import { saveUser } from "../db/store.js";
+import fs from "fs";
 
-export const googleOAuthRouter = express.Router();
+const DB_PATH = "./db/tokens.json";
 
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT
-);
+function saveTokens(userId, tokens) {
+  if (!fs.existsSync("./db")) fs.mkdirSync("./db");
 
-// LOGIN
-googleOAuthRouter.get("/", (req, res) => {
-  const slackUserId = req.query.slackUserId;
+  let db = {};
+  if (fs.existsSync(DB_PATH)) {
+    db = JSON.parse(fs.readFileSync(DB_PATH));
+  }
 
-  const url = oauth2Client.generateAuthUrl({
-    access_type: "offline",
-    prompt: "consent",
-    scope: [
-      "https://www.googleapis.com/auth/gmail.readonly",
-      "https://mail.google.com/",
-      "https://www.googleapis.com/auth/userinfo.email",
-      "openid",
-      "profile",
-    ],
-    state: slackUserId,
-  });
+  db[userId] = tokens;
+  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+}
 
-  res.redirect(url);
-});
+export function initGoogleOAuth(app) {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
 
-// CALLBACK
-googleOAuthRouter.get("/callback", async (req, res) => {
-  try {
-    const slackUserId = req.query.state;
-    const { tokens } = await oauth2Client.getToken(req.query.code);
-
-    oauth2Client.setCredentials(tokens);
-
-    const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-    const profile = await gmail.users.getProfile({ userId: "me" });
-
-    await saveUser(`mail:${slackUserId}`, {
-      provider: "gmail",
-      email: profile.data.emailAddress,
-      tokens,
-      expiresAt: tokens.expiry_date,
+  app.get("/auth/google", (req, res) => {
+    const url = oauth2Client.generateAuthUrl({
+      access_type: "offline",
+      scope: ["https://www.googleapis.com/auth/gmail.readonly"],
+      state: req.query.user,
     });
 
-    res.send("✅ Google email connected successfully. You may return to Slack.");
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("❌ Google OAuth failed");
-  }
-});
+    res.redirect(url);
+  });
+
+  app.get("/auth/google/callback", async (req, res) => {
+    try {
+      const { code, state } = req.query;
+      const { tokens } = await oauth2Client.getToken(code);
+      saveTokens(state, tokens);
+
+      res.send("✅ Gmail connected successfully. You may return to Slack.");
+    } catch (err) {
+      console.error(err);
+      res.status(500).send("❌ OAuth failed");
+    }
+  });
+}
