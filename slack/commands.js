@@ -15,7 +15,7 @@ export function registerCommands(slackApp) {
       text: "📨 Fetching your latest emails…",
     });
 
-    const cfg = getUser(`mail:${userId}`);
+    const cfg = await getUserMail(userId);
     if (!cfg) {
       await client.chat.postMessage({
         channel,
@@ -69,4 +69,39 @@ export function registerCommands(slackApp) {
       });
     }
   });
-}
+  /* ======================
+     /clear-bot
+     ====================== */
+  slackApp.command("/clear-bot", async ({ ack, body, client, context }) => {
+    await ack();
+    const channel = body.channel_id;
+    log("/clear-bot", { user: body.user_id, channel });
+
+    try {
+      const botUserId = context.botUserId || (await client.auth.test()).user_id;
+
+      const history = await client.conversations.history({
+        channel,
+        limit: 100,
+      });
+
+      const botMessages = (history.messages || [])
+        .filter((m) => m.user === botUserId && m.ts)
+        .slice(0, 20);
+
+      for (const msg of botMessages) {
+        await client.chat.delete({ channel, ts: msg.ts });
+      }
+
+      await client.chat.postMessage({
+        channel,
+        text: `🧹 Cleared ${botMessages.length} bot messages.`,
+      });
+    } catch (err) {
+      error("/clear-bot error", err);
+      await client.chat.postMessage({
+        channel,
+        text: "❌ Failed to clear messages. Ensure the app has history + chat:write scopes.",
+      });
+    }
+  });}
