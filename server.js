@@ -9,6 +9,7 @@ const app = express();
 
 initSlack(app);
 initGoogleOAuth(app);
+initMicrosoftOAuth(app);
 
 app.get("/", (_, res) => {
   res.send("✅ Server running");
