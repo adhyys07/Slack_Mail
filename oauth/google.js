@@ -1,19 +1,7 @@
 import { google } from "googleapis";
-import fs from "fs";
+import { saveTokens } from "../providers/googleTokens.js";
+import { slackApp } from "../slack/app.js";
 
-const DB_PATH = "./db/tokens.json";
-
-function saveTokens(userId, tokens) {
-  if (!fs.existsSync("./db")) fs.mkdirSync("./db");
-
-  let db = {};
-  if (fs.existsSync(DB_PATH)) {
-    db = JSON.parse(fs.readFileSync(DB_PATH));
-  }
-
-  db[userId] = tokens;
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
-}
 
 function initGoogleOAuth(app) {
   const oauth2Client = new google.auth.OAuth2(
@@ -34,9 +22,24 @@ function initGoogleOAuth(app) {
 
   app.get("/auth/google/callback", async (req, res) => {
     try {
-      const { code, state } = req.query;
+      const { code, state: slackUserId } = req.query;
       const { tokens } = await oauth2Client.getToken(code);
-      saveTokens(state, tokens);
+      saveTokens(slackUserId, tokens);
+
+      // Send Slack DM confirmation
+      if (slackUserId && slackApp) {
+        try {
+          const dm = await slackApp.client.conversations.open({ users: slackUserId });
+          if (dm.ok) {
+            await slackApp.client.chat.postMessage({
+              channel: dm.channel.id,
+              text: "✅ Gmail connected successfully!",
+            });
+          }
+        } catch (slackErr) {
+          console.error("Failed to send Slack message:", slackErr);
+        }
+      }
 
       res.send("✅ Gmail connected successfully. Return to Slack.");
     } catch (err) {

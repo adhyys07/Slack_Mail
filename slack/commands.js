@@ -1,3 +1,5 @@
+import { fetchGmail } from "../providers/gmail.js";
+
 function registerCommands(app) {
   app.command("/connect-email", async ({ ack, command, respond }) => {
     await ack();
@@ -47,6 +49,49 @@ function registerCommands(app) {
       }
     } catch (err) {
       console.error("clear-bot error:", err);
+    }
+  });
+
+  app.command("/get-emails", async ({ ack, command, respond }) => {
+    await ack();
+
+    try {
+      const emails = await fetchGmail(command.user_id);
+
+      if (!emails || emails.length === 0) {
+        await respond({
+          text: "📭 No unread emails found.",
+        });
+        return;
+      }
+
+      const blocks = [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `📬 *You have ${emails.length} unread email(s)*`,
+          },
+        },
+        { type: "divider" },
+      ];
+
+      for (const email of emails) {
+        blocks.push({
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `*${email.subject}*\nFrom: ${email.from}`,
+          },
+        });
+      }
+
+      await respond({ blocks });
+    } catch (err) {
+      console.error("get-emails error:", err);
+      await respond({
+        text: "❌ Failed to fetch emails. Make sure you've connected your Gmail account with `/connect-email`",
+      });
     }
   });
 }

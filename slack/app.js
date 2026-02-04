@@ -2,12 +2,14 @@ import pkg from "@slack/bolt";
 const { App, ExpressReceiver } = pkg;
 import { registerCommands } from "./commands.js";
 
+let slackApp;
+
 function initSlack(expressApp) {
   const receiver = new ExpressReceiver({
     signingSecret: process.env.SLACK_SIGNING_SECRET,
   });
 
-  const slackApp = new App({
+  slackApp = new App({
     token: process.env.SLACK_BOT_TOKEN,
     receiver,
   });
@@ -20,4 +22,4 @@ function initSlack(expressApp) {
   console.log("⚡ Slack initialized");
 }
 
-export { initSlack };
+export { initSlack, slackApp };
