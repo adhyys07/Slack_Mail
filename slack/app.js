@@ -14,8 +14,8 @@ function initSlack(expressApp) {
 
   registerCommands(slackApp);
 
-  // Mount Slack events on the shared Express instance
-  expressApp.use("/slack/events", receiver.app);
+  // Mount Slack receiver at root so /slack/events works
+  expressApp.use(receiver.app);
 
   console.log("⚡ Slack initialized");
 }
