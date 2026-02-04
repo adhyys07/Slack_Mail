@@ -51,4 +51,4 @@ function registerCommands(app) {
   });
 }
 
-module.exports = { registerCommands };
+export { registerCommands };

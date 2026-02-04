@@ -1,7 +1,7 @@
-const express = require("express");
-const dotenv = require("dotenv");
-const { initSlack } = require("./slack/app");
-const { initGoogleOAuth } = require("./oauth/google.js");
+import express from "express";
+import dotenv from "dotenv";
+import { initSlack } from "./slack/app.js";
+import { initGoogleOAuth } from "./oauth/google.js";
 
 dotenv.config();
 

@@ -1,5 +1,6 @@
-const { App, ExpressReceiver } = require("@slack/bolt");
-const { registerCommands } = require("./commands");
+import pkg from "@slack/bolt";
+const { App, ExpressReceiver } = pkg;
+import { registerCommands } from "./commands.js";
 
 function initSlack(expressApp) {
   const receiver = new ExpressReceiver({
@@ -19,4 +20,4 @@ function initSlack(expressApp) {
   console.log("⚡ Slack initialized");
 }
 
-module.exports = { initSlack };
+export { initSlack };

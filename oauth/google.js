@@ -1,5 +1,5 @@
-const { google } = require("googleapis");
-const fs = require("fs");
+import { google } from "googleapis";
+import fs from "fs";
 
 const DB_PATH = "./db/tokens.json";
 
@@ -46,4 +46,4 @@ function initGoogleOAuth(app) {
   });
 }
 
-module.exports = { initGoogleOAuth };
+export { initGoogleOAuth };
