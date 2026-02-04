@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import { initSlack } from "./slack/app.js";
 import { initGoogleOAuth } from "./oauth/google.js";
+import { initMicrosoftOAuth } from "./oauth/microsoft.js";
 
 dotenv.config();
 
