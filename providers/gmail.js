@@ -8,7 +8,7 @@ export async function fetchGmail(userId) {
 
   const list = await gmail.users.messages.list({
     userId: "me",
-    q: "is:unread",
+    q: "is:unread category:primary",
     maxResults: 5,
   });
 

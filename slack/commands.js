@@ -4,7 +4,8 @@ function registerCommands(app) {
   app.command("/connect-email", async ({ ack, command, respond }) => {
     await ack();
 
-    const authUrl = `${process.env.BASE_URL}/auth/google?user=${command.user_id}`;
+    const googleAuthUrl = `${process.env.BASE_URL}/auth/google?user=${command.user_id}`;
+    const microsoftAuthUrl = `${process.env.BASE_URL}/auth/microsoft?user=${command.user_id}`;
 
     await respond({
       text: "Connect your Gmail",
@@ -22,8 +23,13 @@ function registerCommands(app) {
             {
               type: "button",
               text: { type: "plain_text", text: "Connect Gmail" },
-              url: authUrl,
+              url: googleAuthUrl,
             },
+            {
+              type: "button",
+              text: { type: "plain_text", text: "Connect Microsoft" },
+              url: microsoftAuthUrl,
+            }
           ],
         },
       ],
