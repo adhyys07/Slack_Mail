@@ -1,3 +1,5 @@
+import axios from "axios";
+import { google } from "googleapis";
 import { getUser } from "../db/store.js";
 import { getGoogleTokens } from "../providers/googleTokens.js";
 import { fetchGmail } from "../providers/gmail.js";
@@ -103,46 +105,103 @@ function registerCommands(app) {
     }
   });
 
-  app.command("/get-emails", async ({ ack, command, respond }) => {
+  app.command("/get-emails", async ({ command, ack, respond }) => {
     await ack();
 
     try {
-      const emails = await fetchGmail(command.user_id);
+      const userId = command.user_id;
+      const provider = command.text.trim().toLowerCase();
 
-      if (!emails || emails.length === 0) {
-        await respond({
-          text: "📭 No unread emails found.",
-        });
+      if (!provider || !["google", "gmail", "microsoft", "outlook"].includes(provider)) {
+        await respond("❌ Please specify a provider: `/get-emails google` or `/get-emails microsoft`");
         return;
       }
 
-      const blocks = [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `📬 *You have ${emails.length} unread email(s)*`,
-          },
-        },
-        { type: "divider" },
-      ];
+      const normalizedProvider = (provider === "google" || provider === "gmail") ? "google" : "microsoft";
 
-      for (const email of emails) {
-        blocks.push({
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `*${email.subject}*\nFrom: ${email.from}`,
-          },
-        });
+      if (normalizedProvider === "google") {
+        try {
+          const oauth2Client = await getGoogleTokens(userId);
+          const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+          const response = await gmail.users.messages.list({
+            userId: "me",
+            q: "is:unread category:primary",
+            maxResults: 5,
+          });
+
+          const messages = response.data.messages || [];
+
+          if (messages.length === 0) {
+            await respond("✅ No unread emails in Gmail primary inbox!");
+            return;
+          }
+
+          let emailText = `📧 *Unread Gmail (${messages.length})*\n\n`;
+
+          for (const msg of messages) {
+            const detail = await gmail.users.messages.get({
+              userId: "me",
+              id: msg.id,
+              format: "metadata",
+              metadataHeaders: ["From", "Subject"],
+            });
+
+            const headers = detail.data.payload.headers;
+            const from = headers.find((h) => h.name === "From")?.value || "Unknown";
+            const subject = headers.find((h) => h.name === "Subject")?.value || "No Subject";
+
+            emailText += `*From:* ${from}\n*Subject:* ${subject}\n\n`;
+          }
+
+          await respond(emailText);
+        } catch (err) {
+          console.error("Gmail fetch error:", err);
+          await respond("❌ Gmail not connected or error fetching emails. Use `/connect-email` first.");
+        }
+      } else {
+        const user = await getUser(userId);
+
+        if (!user || !user.microsoft_access_token) {
+          await respond("❌ Microsoft/Outlook not connected. Use `/connect-email` first.");
+          return;
+        }
+
+        try {
+          const response = await axios.get(
+            "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$filter=isRead eq false&$top=5&$select=from,subject,receivedDateTime",
+            {
+              headers: {
+                Authorization: `Bearer ${user.microsoft_access_token}`,
+              },
+            }
+          );
+
+          const messages = response.data.value || [];
+
+          if (messages.length === 0) {
+            await respond("✅ No unread emails in Outlook inbox!");
+            return;
+          }
+
+          let emailText = `📧 *Unread Outlook (${messages.length})*\n\n`;
+
+          for (const msg of messages) {
+            const from = msg.from?.emailAddress?.address || "Unknown";
+            const subject = msg.subject || "No Subject";
+
+            emailText += `*From:* ${from}\n*Subject:* ${subject}\n\n`;
+          }
+
+          await respond(emailText);
+        } catch (err) {
+          console.error("Outlook fetch error:", err);
+          await respond("❌ Error fetching Outlook emails. Token may be expired.");
+        }
       }
-
-      await respond({ blocks });
     } catch (err) {
       console.error("get-emails error:", err);
-      await respond({
-        text: "❌ Failed to fetch emails. Make sure you've connected your Gmail account with `/connect-email`",
-      });
+      await respond("❌ Error fetching emails. Please try again later.");
     }
   });
 }
