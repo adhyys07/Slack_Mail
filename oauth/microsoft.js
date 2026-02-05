@@ -47,15 +47,17 @@ function initMicrosoftOAuth(app) {
       const { access_token, refresh_token, expires_in } = tokenRes.data;
 
       if (slackUserId) {
+        const existing = await getUser(slackUserId);
         const xoauth2 = Buffer.from(
           `user=${"unknown"}\u0001auth=Bearer ${access_token}\u0001\u0001`
         ).toString("base64");
-        saveUser(slackUserId, {
-          provider: "microsoft",
-          access_token,
-          refresh_token,
-          expires_at: Date.now() + expires_in * 1000,
-          xoauth2,
+        await saveUser(slackUserId, {
+          ...existing,
+          microsoft_provider: "microsoft",
+          microsoft_access_token: access_token,
+          microsoft_refresh_token: refresh_token,
+          microsoft_expires_at: Date.now() + expires_in * 1000,
+          microsoft_xoauth2: xoauth2,
         });
 
         try {

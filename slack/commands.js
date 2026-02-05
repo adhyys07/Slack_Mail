@@ -59,7 +59,7 @@ function registerCommands(app) {
       // Check for Microsoft tokens (stored in Redis)
       let microsoftStatus = "❌ Not connected";
       console.log("User mail data:", userMail);
-      if (userMail && userMail.provider === "microsoft" && userMail.access_token) {
+      if (userMail && userMail.microsoft_provider === "microsoft" && userMail.microsoft_access_token) {
         microsoftStatus = "✅ Connected";
       }
 
