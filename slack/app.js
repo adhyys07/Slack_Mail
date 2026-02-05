@@ -1,6 +1,6 @@
 import pkg from "@slack/bolt";
 const { App, ExpressReceiver } = pkg;
-import { registerCommands } from "./commands.js";
+import { registerCommands, registerViews } from "./commands.js";
 
 let slackApp;
 
@@ -15,6 +15,7 @@ function initSlack(expressApp) {
   });
 
   registerCommands(slackApp);
+  registerViews(slackApp);
 
   // Mount Slack receiver at root so /slack/events works
   expressApp.use(receiver.app);

@@ -510,7 +510,9 @@ app.view("send_email_modal", async ({ ack, body, view, client }) => {
       },
     });
   });
+}
 
+function registerViews(app) {
   app.view("send_email_modal", async ({ ack, body, view, client }) => {
     await ack();
 
@@ -632,4 +634,4 @@ app.view("send_email_modal", async ({ ack, body, view, client }) => {
   });
 }
 
-export { registerCommands };
+export { registerCommands, registerViews };
