@@ -407,6 +407,219 @@ app.view("send_email_modal", async ({ ack, body, view, client }) => {
       await respond("❌ Error fetching emails. Please try again later.");
     }
   });
+
+  app.command("/send-email", async ({ ack, command, body, client }) => {
+    await ack();
+
+    // ✅ Bot exclusive - DM only
+    if (command.channel_name !== "directmessage") {
+      await client.chat.postMessage({
+        channel: command.user_id,
+        text: "🔒 This command only works in DMs with the bot.",
+      });
+      return;
+    }
+
+    // Open modal with form
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: {
+        type: "modal",
+        callback_id: "send_email_modal",
+        title: {
+          type: "plain_text",
+          text: "Send Email",
+        },
+        submit: {
+          type: "plain_text",
+          text: "Send",
+        },
+        blocks: [
+          {
+            type: "input",
+            block_id: "provider_block",
+            label: {
+              type: "plain_text",
+              text: "Email Provider",
+            },
+            element: {
+              type: "static_select",
+              action_id: "provider_select",
+              options: [
+                {
+                  text: { type: "plain_text", text: "Gmail" },
+                  value: "google",
+                },
+                {
+                  text: { type: "plain_text", text: "Outlook" },
+                  value: "microsoft",
+                },
+              ],
+            },
+          },
+          {
+            type: "input",
+            block_id: "recipient_block",
+            label: {
+              type: "plain_text",
+              text: "Recipient Email",
+            },
+            element: {
+              type: "plain_text_input",
+              action_id: "recipient_input",
+              placeholder: {
+                type: "plain_text",
+                text: "recipient@example.com",
+              },
+            },
+          },
+          {
+            type: "input",
+            block_id: "subject_block",
+            label: {
+              type: "plain_text",
+              text: "Subject",
+            },
+            element: {
+              type: "plain_text_input",
+              action_id: "subject_input",
+              placeholder: {
+                type: "plain_text",
+                text: "Email subject",
+              },
+            },
+          },
+          {
+            type: "input",
+            block_id: "body_block",
+            label: {
+              type: "plain_text",
+              text: "Email Body",
+            },
+            element: {
+              type: "plain_text_input",
+              action_id: "body_input",
+              multiline: true,
+              placeholder: {
+                type: "plain_text",
+                text: "Write your email here...",
+              },
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  app.view("send_email_modal", async ({ ack, body, view, client }) => {
+    await ack();
+
+    try {
+      const userId = body.user.id;
+      const values = view.state.values;
+
+      const provider = values.provider_block.provider_select.selected_option.value;
+      const recipientEmail = values.recipient_block.recipient_input.value;
+      const subject = values.subject_block.subject_input.value;
+      const emailBody = values.body_block.body_input.value;
+
+      if (!recipientEmail || !subject || !emailBody) {
+        await client.chat.postMessage({
+          channel: userId,
+          text: "❌ Please fill in all fields.",
+        });
+        return;
+      }
+
+      if (provider === "google") {
+        try {
+          const oauth2Client = await getGoogleTokens(userId);
+          const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+          const message = [
+            `To: ${recipientEmail}`,
+            "Subject: " + subject,
+            "MIME-Version: 1.0",
+            "Content-Type: text/plain; charset=UTF-8",
+            "",
+            emailBody,
+          ].join("\n");
+
+          const encodedMessage = Buffer.from(message).toString("base64");
+
+          await gmail.users.messages.send({
+            userId: "me",
+            requestBody: {
+              raw: encodedMessage,
+            },
+          });
+
+          await client.chat.postMessage({
+            channel: userId,
+            text: `✅ Email sent successfully via Gmail to ${recipientEmail}`,
+          });
+        } catch (err) {
+          console.error("Gmail send error:", err);
+          await client.chat.postMessage({
+            channel: userId,
+            text: "❌ Failed to send email via Gmail.",
+          });
+        }
+      } else {
+        const user = await getUser(userId);
+
+        if (!user || !user.microsoft_access_token) {
+          await client.chat.postMessage({
+            channel: userId,
+            text: "❌ Microsoft/Outlook not connected. Use `/connect-email` first.",
+          });
+          return;
+        }
+
+        try {
+          await axios.post(
+            "https://graph.microsoft.com/v1.0/me/sendMail",
+            {
+              message: {
+                subject: subject,
+                body: {
+                  contentType: "text/plain",
+                  content: emailBody,
+                },
+                toRecipients: [
+                  {
+                    emailAddress: {
+                      address: recipientEmail,
+                    },
+                  },
+                ],
+              },
+              saveToSentItems: true,
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${user.microsoft_access_token}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+
+          await client.chat.postMessage({
+            channel: userId,
+            text: `✅ Email sent successfully via Outlook to ${recipientEmail}`,
+          });
+        } catch (err) {
+          console.error("Outlook send error:", err);
+          await client.chat.postMessage({
+            channel: userId,
+            text: "❌ Failed to send email via Outlook.",
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Modal submission error:", err);
+    }
+  });
 }
 
 export { registerCommands };
