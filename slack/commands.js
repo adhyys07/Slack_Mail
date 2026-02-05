@@ -3,7 +3,6 @@ import { google } from "googleapis";
 import { getUser } from "../db/store.js";
 import { getGoogleTokens } from "../providers/googleTokens.js";
 import { fetchGmail } from "../providers/gmail.js";
-import { text } from "express";
 
 function registerCommands(app) {
   app.command("/connect-email", async ({ ack, command, respond }) => {
