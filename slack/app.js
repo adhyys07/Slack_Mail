@@ -14,6 +14,13 @@ function initSlack(expressApp) {
     receiver,
   });
 
+  // Catch signature verification errors
+  receiver.app.use((err, req, res, next) => {
+    console.error("⚠️ Middleware error:", err.message);
+    if (res.headersSent) return next(err);
+    res.status(err.status || 500).send({ error: err.message });
+  });
+
   registerCommands(slackApp);
   registerViews(slackApp);
 

@@ -8,6 +8,9 @@ dotenv.config();
 
 const app = express();
 
+// ⚠️ CRITICAL: Parse JSON BEFORE Slack receiver (needed for signature verification)
+app.use(express.json());
+
 initSlack(app);
 initGoogleOAuth(app);
 initMicrosoftOAuth(app);
