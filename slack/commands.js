@@ -313,7 +313,7 @@ function registerViews(app) {
   console.log("✅ Registering view handlers...");
   
   // Debug: Log all incoming requests
-  app.middleware(async ({ body, next }) => {
+  app.use(async ({ body, next }) => {
     if (body.type === "view_submission") {
       console.log("🔍 View submission detected:", body.view?.callback_id);
     }
