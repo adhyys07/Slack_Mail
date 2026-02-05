@@ -3,6 +3,7 @@ import { google } from "googleapis";
 import { getUser } from "../db/store.js";
 import { getGoogleTokens } from "../providers/googleTokens.js";
 import { fetchGmail } from "../providers/gmail.js";
+import { text } from "express";
 
 function registerCommands(app) {
   app.command("/connect-email", async ({ ack, command, respond }) => {
@@ -104,6 +105,209 @@ function registerCommands(app) {
       console.error("clear-bot error:", err);
     }
   });
+
+  app.command("/send-emails", async ({ ack, command, body, client }) => {
+    await ack();
+
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: {
+        type:"modal",
+        callback_id: "send_email_modal",
+        title:{
+          type:"plain_text",
+          text:"Send Email",
+        },
+        submit:{
+          type: "plain_text",
+          test:"send",
+        },
+        blocks:[
+          {
+            type:"input",
+            block_id:"provider_block",
+            label:{
+              type:"plain_text",
+              text:"Select Email Provider",
+            },
+            element:{
+              type:"static_select",
+              action_id:"provider_action",
+            options:[
+              {
+                text:{ type:"plain_text", text:"Gmail" },
+                value:"gmail",
+            },
+            {
+                text:{ type:"plain_text", text:"Outlook" },
+                value:"outlook",
+            },
+          ],
+        },
+      },
+      {
+        type:"input",
+        block_id:"recipient_block",
+        label:{
+          type:"plain_text",
+          text:"Recipient Email Address",
+        },
+        element:{
+          type:"plain_text_input",
+          action_id:"recipient_input",
+          placeholder:{
+            type:"plain_text",
+            text:"recipient@example.com",
+          },
+        },
+        },
+        {
+          type:"input",
+          block_id:"subject_block",
+          label:{
+            type:"plain_text",
+            text:"Email Subject",
+          },
+          element:{
+            type:"plain_text_input",
+            action_id:"subject_input",
+            placeholder:{
+              type:"plain_text",
+              text:"Email Subject",
+        },
+        },
+        },
+        {          
+          type:"input",
+          block_id:"body_block",
+          label:{
+            type:"plain_text",
+            text:"Email Body",
+          },
+          element:{
+            type:"plain_text_input",
+            action_id:"body_input",
+            multiline:true,
+            placeholder:{
+              type:"plain_text",
+              text:"Write your email content here...",
+            },
+          },
+        },
+      ],
+    },
+  });
+});
+
+app.view("send_email_modal", async ({ ack, body, view, client }) => {
+  await ack();
+
+  try{
+    const userId = body.user.id;
+    const values = view.state.values;
+
+    const provider = values.provider_block.provider_select.selected_option.value;
+    const recipientEmail = values.recipient_block.recipient_input_value;
+    const subject = values.subject_block.subject_input.value;
+    const emailBody = values.body_block.body_input.value;
+
+    if (!recipientEmail || !subject || !emailBody){
+      await client.chat.postMessage({
+        channel:userId , 
+        text: "Please fill in all fields",
+      });
+      return;
+    }
+
+    if (provider === "google"){
+      try{
+        const oauth2Client= await getGoogleTokens(userId);
+        const gmail= google.gmail({version : "v1", auth:oauth2Client});
+
+        const messsage = [
+          `To: ${recipientEmail}`,
+          "Subject: " + subject,
+          "MIME-Version: 1.0",
+          "Content-Type: text/plain; charset=UTF-8",
+          "",
+          emailBody,
+
+        ].join("\n")
+
+        const encodedMessage = Buffer.from(message).toString("base64");
+
+        await gmail.user.messages.send({
+          userId: "me",
+          requestBody:{
+            raw: encodedMessage
+          },
+        });
+
+        await client.chat.postMessage({
+          channel:userId,
+          text:`Email sent successfully via Gmail to ${recipientEmail}`,
+        });
+      } catch (err) {
+        await client.chat.postMessage({
+          channel: userId,
+          text: "❌ Failed to send email via Gmail.",
+        });
+      }
+    } else{
+      const user = await getUser(userId);
+
+      if(!user || !user.microsoft_access_token) {
+        await client.chat.postMessage({
+          channel: userId,
+          text: "❌ Microsoft/Outlook not connected. Use `/connect-email` first.",
+        });
+        return;
+      }
+      try{
+        await axios.post(
+          "https://graph.microsoft.com/v1.0/me/sendMail",
+          {
+            message:{
+              subject: subject,
+              body:{
+                contentType: "text/plain",
+                content: emailBody,
+              },
+               toRecipients: [
+                {
+                  emailAddress: {
+                    address: recipientEmail,
+                  },
+            },
+               ],
+              },
+              saveToSentItems: true,
+            },
+            {
+              headers:{
+                Authorization: `Bearer ${user.microsoft_access_token}`,
+                "Content-Type": "application/json",
+              },
+            }
+        );
+        await client.chat.postMessage({
+          channel: userId,
+          text: `Email sent successfully via Outlook to ${recipientEmail}`,
+        });
+      } catch(err){
+        console.error("Error sending Outlook email:", err);
+        await client.chat.postMessage({
+          channel: userId,
+          text: "❌ Failed to send email via Outlook.",
+        });
+      }
+    }
+  } catch (err) {
+    console.error("Error handling send email modal submission:", err);
+  }
+});
+        
+
 
   app.command("/get-emails", async ({ command, ack, respond }) => {
     await ack();
