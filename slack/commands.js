@@ -310,7 +310,9 @@ function registerCommands(app) {
 }
 
 function registerViews(app) {
+  console.log("✅ Registering view handlers...");
   app.view("send_email_modal", async ({ ack, body, view, client }) => {
+    console.log("📨 View submission received!");
     await ack();
 
     try {
