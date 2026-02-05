@@ -21,6 +21,7 @@ export async function sendEmailViaGoogle(userId, recipientEmail, subject, body) 
   const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
   const message = [
+    "From: me",
     `To: ${recipientEmail}`,
     `Subject: ${subject}`,
     "MIME-Version: 1.0",
@@ -29,7 +30,11 @@ export async function sendEmailViaGoogle(userId, recipientEmail, subject, body) 
     body,
   ].join("\n");
 
-  const encodedMessage = Buffer.from(message).toString("base64");
+  const encodedMessage = Buffer.from(message)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 
   try {
     const response = await gmail.users.messages.send({
