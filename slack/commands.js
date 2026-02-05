@@ -311,8 +311,17 @@ function registerCommands(app) {
 
 function registerViews(app) {
   console.log("✅ Registering view handlers...");
+  
+  // Debug: Log all incoming requests
+  app.middleware(async ({ body, next }) => {
+    if (body.type === "view_submission") {
+      console.log("🔍 View submission detected:", body.view?.callback_id);
+    }
+    await next();
+  });
+
   app.view("send_email_modal", async ({ ack, body, view, client }) => {
-    console.log("📨 View submission received!");
+    console.log("📨 View submission received for:", view.callback_id);
     await ack();
 
     try {
