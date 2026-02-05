@@ -1,3 +1,4 @@
+import { getUser } from "../db/store.js";
 import { fetchGmail } from "../providers/gmail.js";
 
 function registerCommands(app) {
@@ -34,6 +35,38 @@ function registerCommands(app) {
         },
       ],
     });
+  });
+
+  app.command("/check-accounts", async ({ ack, command, respond }) => {
+    await ack();
+
+    try {
+      const userId = command.user_id;
+      const userMail = await getUser(userId);
+
+      if (!userMail) {
+        await respond("❌ No email account connected. Use `/connect-email` to connect.");
+        return;
+      }
+      const provider = userMail.provider === "google" ? "Gmail" : "Microsoft";
+      const isConnected = userMail.access_token ? "✅ Connected" : "❌ Not connected";
+
+      await respond({
+        text: `📧 *Email Account Status*\nProvider: ${provider}\nStatus: ${isConnected}`,
+        blocks:[
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `📧 *Email Account Status*\nProvider: ${provider}\nStatus: ${isConnected}`,
+            },
+          },
+        ],
+      });
+    } catch (err) {
+      console.error("check-accounts error:", err);
+      await respond("❌ Error checking accounts. Please try again later.");
+    }
   });
 
   app.command("/clear-bot", async ({ ack, command, client }) => {
