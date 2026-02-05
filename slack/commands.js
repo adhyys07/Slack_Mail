@@ -518,10 +518,20 @@ app.view("send_email_modal", async ({ ack, body, view, client }) => {
       const userId = body.user.id;
       const values = view.state.values;
 
-      const provider = values.provider_block.provider_select.selected_option.value;
-      const recipientEmail = values.recipient_block.recipient_input.value;
-      const subject = values.subject_block.subject_input.value;
-      const emailBody = values.body_block.body_input.value;
+      console.log("Modal values:", JSON.stringify(values, null, 2));
+
+      const providerOption = values.provider_block?.provider_select?.selected_option;
+      if (!providerOption) {
+        console.error("No provider selected");
+        return;
+      }
+
+      const provider = providerOption.value;
+      const recipientEmail = values.recipient_block?.recipient_input?.value;
+      const subject = values.subject_block?.subject_input?.value;
+      const emailBody = values.body_block?.body_input?.value;
+
+      console.log("Extracted:", { provider, recipientEmail, subject, emailBody });
 
       if (!recipientEmail || !subject || !emailBody) {
         await client.chat.postMessage({
