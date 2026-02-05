@@ -342,7 +342,9 @@ function registerViews(app) {
 
       if (provider === "google") {
         try {
+          console.log("Attempting to send via Google...");
           const oauth2Client = await getGoogleTokens(userId);
+          console.log("Got oauth2Client:", !!oauth2Client);
           const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
           const message = [
@@ -355,23 +357,27 @@ function registerViews(app) {
           ].join("\n");
 
           const encodedMessage = Buffer.from(message).toString("base64");
+          console.log("Sending message...");
 
-          await gmail.users.messages.send({
+          const response = await gmail.users.messages.send({
             userId: "me",
             requestBody: {
               raw: encodedMessage,
             },
           });
+          
+          console.log("Gmail send response:", response.data);
 
           await client.chat.postMessage({
             channel: userId,
             text: `✅ Email sent successfully via Gmail to ${recipientEmail}`,
           });
         } catch (err) {
-          console.error("Gmail send error:", err);
+          console.error("Gmail send error:", err.message);
+          console.error("Full error:", err);
           await client.chat.postMessage({
             channel: userId,
-            text: "❌ Failed to send email via Gmail.",
+            text: `❌ Gmail Error: ${err.message}`,
           });
         }
       } else {
@@ -386,7 +392,10 @@ function registerViews(app) {
         }
 
         try {
-          await axios.post(
+          console.log("Attempting to send via Microsoft...");
+          console.log("User data:", { has_token: !!user.microsoft_access_token });
+          
+          const response = await axios.post(
             "https://graph.microsoft.com/v1.0/me/sendMail",
             {
               message: {
@@ -413,15 +422,18 @@ function registerViews(app) {
             }
           );
 
+          console.log("Outlook send response:", response.status);
+
           await client.chat.postMessage({
             channel: userId,
             text: `✅ Email sent successfully via Outlook to ${recipientEmail}`,
           });
         } catch (err) {
-          console.error("Outlook send error:", err);
+          console.error("Outlook send error:", err.message);
+          console.error("Error response:", err.response?.data);
           await client.chat.postMessage({
             channel: userId,
-            text: "❌ Failed to send email via Outlook.",
+            text: `❌ Outlook Error: ${err.response?.data?.error?.message || err.message}`,
           });
         }
       }
