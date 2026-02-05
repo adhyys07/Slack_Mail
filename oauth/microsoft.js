@@ -1,4 +1,3 @@
-import express from "express";
 import axios from "axios";
 import { saveUser } from "../db/store.js";
 import { slackApp } from "../slack/app.js";
@@ -47,20 +46,15 @@ function initMicrosoftOAuth(app) {
 
       const { access_token, refresh_token, expires_in } = tokenRes.data;
 
-      saveUser(slackUserId, {
-        provider: "microsoft",
-        access_token,
-        refresh_token,
-        expires_at: Date.now() + expires_in * 1000,
-      });
-
       if (slackUserId) {
         const xoauth2 = Buffer.from(
           `user=${"unknown"}\u0001auth=Bearer ${access_token}\u0001\u0001`
         ).toString("base64");
-
         saveUser(slackUserId, {
           provider: "microsoft",
+          access_token,
+          refresh_token,
+          expires_at: Date.now() + expires_in * 1000,
           xoauth2,
         });
 

@@ -1,4 +1,5 @@
 import { getUser } from "../db/store.js";
+import { getGoogleTokens } from "../providers/googleTokens.js";
 import { fetchGmail } from "../providers/gmail.js";
 
 function registerCommands(app) {
@@ -44,21 +45,32 @@ function registerCommands(app) {
       const userId = command.user_id;
       const userMail = await getUser(userId);
 
-      if (!userMail) {
-        await respond("❌ No email account connected. Use `/connect-email` to connect.");
-        return;
+      // Check for Google tokens (stored in file system)
+      let googleStatus = "❌ Not connected";
+      try {
+        const googleTokens = await getGoogleTokens(userId);
+        console.log("Google tokens for user:", googleTokens);
+        if (googleTokens) googleStatus = "✅ Connected";
+      } catch (err) {
+        googleStatus = "❌ Not connected";
+        console.error("Error checking Google tokens:", err.message);
       }
-      const provider = userMail.provider === "google" ? "Gmail" : "Microsoft";
-      const isConnected = userMail.access_token ? "✅ Connected" : "❌ Not connected";
+
+      // Check for Microsoft tokens (stored in Redis)
+      let microsoftStatus = "❌ Not connected";
+      console.log("User mail data:", userMail);
+      if (userMail && userMail.provider === "microsoft" && userMail.access_token) {
+        microsoftStatus = "✅ Connected";
+      }
 
       await respond({
-        text: `📧 *Email Account Status*\nProvider: ${provider}\nStatus: ${isConnected}`,
-        blocks:[
+        text: "Email Account Status",
+        blocks: [
           {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: `📧 *Email Account Status*\nProvider: ${provider}\nStatus: ${isConnected}`,
+              text: `📧 *Email Account Status*\n\n*Gmail:* ${googleStatus}\n*Microsoft/Outlook:* ${microsoftStatus}`,
             },
           },
         ],

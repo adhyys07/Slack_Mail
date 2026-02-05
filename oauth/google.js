@@ -24,7 +24,7 @@ function initGoogleOAuth(app) {
     try {
       const { code, state: slackUserId } = req.query;
       const { tokens } = await oauth2Client.getToken(code);
-      saveTokens(slackUserId, tokens);
+      await saveTokens(slackUserId, tokens);
 
       // Send Slack DM confirmation
       if (slackUserId && slackApp) {
