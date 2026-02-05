@@ -1,5 +1,5 @@
 import axios from "axios";
-import { saveUser } from "../db/store.js";
+import { saveUser, getUser } from "../db/store.js";
 import { slackApp } from "../slack/app.js";
 
 const CLIENT_ID = process.env.MS_CLIENT_ID;
