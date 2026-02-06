@@ -73,7 +73,7 @@ export async function sendEmailViaOutlook(userId, recipientEmail, subject, body)
         message: {
           subject: subject,
           body: {
-            contentType: "text/plain",
+            contentType: "Text",
             content: body,
           },
           toRecipients: [
