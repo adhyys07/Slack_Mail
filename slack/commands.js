@@ -304,6 +304,24 @@ function registerCommands(app) {
               },
             },
           },
+          {
+            type: "input",
+            block_id: "attachments_block",
+            optional: true,
+            label: {
+              type: "plain_text",
+              text: "Attachments (URLs, one per line)",
+            },
+            element: {
+              type: "plain_text_input",
+              action_id: "attachments_input",
+              multiline: true,
+              placeholder: {
+                type: "plain_text",
+                text: "https://example.com/file.pdf\nhttps://example.com/image.png",
+              },
+            },
+          },
         ],
       },
     });
@@ -336,6 +354,11 @@ function registerViews(app) {
       const recipientEmail = values.recipient_block?.recipient_input?.value;
       const subject = values.subject_block?.subject_input?.value;
       const emailBody = values.body_block?.body_input?.value;
+      const attachmentsRaw = values.attachments_block?.attachments_input?.value || "";
+      const attachmentUrls = attachmentsRaw
+        .split(/\r?\n/)
+        .map((u) => u.trim())
+        .filter(Boolean);
 
       console.log("Form data extracted:", { provider, recipientEmail, subject: subject?.substring(0, 20) });
 
@@ -358,7 +381,7 @@ function registerViews(app) {
 
       // Send email
       console.log(`Attempting to send email via ${provider}...`);
-      const result = await sendEmail(userId, provider, recipientEmail, subject, emailBody);
+      const result = await sendEmail(userId, provider, recipientEmail, subject, emailBody, attachmentUrls);
 
       // Success response
       await client.chat.postMessage({
