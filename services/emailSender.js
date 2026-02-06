@@ -1,9 +1,49 @@
 import axios from "axios";
 import { google } from "googleapis";
-import { getUser } from "../db/store.js";
+import { getUser, saveUser } from "../db/store.js";
 
 const MAX_ATTACHMENTS = 3;
 const MAX_BYTES_PER_FILE = 5 * 1024 * 1024; // 5MB
+
+// Refresh Microsoft access token if expired (1 min buffer)
+async function ensureMicrosoftAccessToken(userId) {
+  const user = await getUser(userId);
+  if (!user || !user.microsoft_refresh_token) {
+    throw new Error("Microsoft not connected. Please /connect-email again.");
+  }
+
+  const now = Date.now();
+  if (
+    user.microsoft_access_token &&
+    user.microsoft_expires_at &&
+    user.microsoft_expires_at > now + 60_000
+  ) {
+    return user.microsoft_access_token; // still valid
+  }
+
+  const resp = await axios.post(
+    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    new URLSearchParams({
+      client_id: process.env.MS_CLIENT_ID,
+      client_secret: process.env.MS_CLIENT_SECRET,
+      grant_type: "refresh_token",
+      refresh_token: user.microsoft_refresh_token,
+      scope: "https://graph.microsoft.com/.default offline_access",
+    }).toString(),
+    { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+  );
+
+  const { access_token, refresh_token, expires_in } = resp.data;
+  const updated = {
+    ...user,
+    microsoft_access_token: access_token,
+    microsoft_refresh_token: refresh_token || user.microsoft_refresh_token,
+    microsoft_expires_at: Date.now() + expires_in * 1000,
+    microsoft_provider: "microsoft",
+  };
+  await saveUser(userId, updated);
+  return updated.microsoft_access_token;
+}
 
 async function fetchAttachments(urls = []) {
   const safeUrls = urls.slice(0, MAX_ATTACHMENTS);
@@ -148,12 +188,7 @@ export async function sendEmailViaOutlook(
 ) {
   console.log(`📧 Starting Outlook email send to ${recipientEmail}`);
   
-  const user = await getUser(userId);
-  if (!user || !user.microsoft_access_token) {
-    throw new Error("Microsoft token not found. Please connect Outlook first.");
-  }
-
-  const msToken = user.microsoft_access_token;
+  const msToken = await ensureMicrosoftAccessToken(userId);
 
   try {
     const attachments = await fetchAttachments(attachmentUrls);
