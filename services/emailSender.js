@@ -2,7 +2,34 @@ import axios from "axios";
 import { google } from "googleapis";
 import { getUser } from "../db/store.js";
 
-export async function sendEmailViaGoogle(userId, recipientEmail, subject, body) {
+const MAX_ATTACHMENTS = 3;
+const MAX_BYTES_PER_FILE = 5 * 1024 * 1024; // 5MB
+
+async function fetchAttachments(urls = []) {
+  const safeUrls = urls.slice(0, MAX_ATTACHMENTS);
+  const attachments = [];
+
+  for (const url of safeUrls) {
+    const res = await axios.get(url, { responseType: "arraybuffer" });
+    const buf = Buffer.from(res.data);
+    if (buf.length > MAX_BYTES_PER_FILE) {
+      throw new Error(`Attachment too large (>5MB): ${url}`);
+    }
+    const contentType = res.headers["content-type"] || "application/octet-stream";
+    const filename = decodeURIComponent(url.split("/").pop() || "file.bin");
+    attachments.push({ filename, mimeType: contentType, base64: buf.toString("base64") });
+  }
+
+  return attachments;
+}
+
+export async function sendEmailViaGoogle(
+  userId,
+  recipientEmail,
+  subject,
+  body,
+  attachmentUrls = []
+) {
   console.log(`📧 Starting Google email send to ${recipientEmail}`);
   
   const user = await getUser(userId);
@@ -20,17 +47,75 @@ export async function sendEmailViaGoogle(userId, recipientEmail, subject, body) 
   
   const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
-  const message = [
+  const attachments = await fetchAttachments(attachmentUrls);
+
+  // If no attachments, keep simple text path
+  if (!attachments.length) {
+    const message = [
+      "From: me",
+      `To: ${recipientEmail}`,
+      `Subject: ${subject}`,
+      "MIME-Version: 1.0",
+      "Content-Type: text/plain; charset=UTF-8",
+      "",
+      body,
+    ].join("\n");
+
+    const encodedMessage = Buffer.from(message)
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+
+    try {
+      const response = await gmail.users.messages.send({
+        userId: "me",
+        requestBody: {
+          raw: encodedMessage,
+        },
+      });
+
+      console.log(`✅ Gmail email sent successfully. Message ID: ${response.data.id}`);
+      return {
+        success: true,
+        messageId: response.data.id,
+        provider: "Gmail",
+      };
+    } catch (err) {
+      console.error(`❌ Gmail API error: ${err.message}`);
+      throw new Error(`Gmail error: ${err.message}`);
+    }
+  }
+
+  // Multipart with attachments
+  const boundary = "mixed_" + Date.now();
+  const lines = [
     "From: me",
     `To: ${recipientEmail}`,
     `Subject: ${subject}`,
     "MIME-Version: 1.0",
-    "Content-Type: text/plain; charset=UTF-8",
+    `Content-Type: multipart/mixed; boundary=\"${boundary}\"`,
+    "",
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
     "",
     body,
-  ].join("\n");
+  ];
 
-  const encodedMessage = Buffer.from(message)
+  attachments.forEach((att) => {
+    lines.push(
+      `--${boundary}`,
+      `Content-Type: ${att.mimeType}`,
+      `Content-Disposition: attachment; filename=\"${att.filename}\"`,
+      "Content-Transfer-Encoding: base64",
+      "",
+      att.base64
+    );
+  });
+
+  lines.push(`--${boundary}--`, "");
+
+  const encodedMessage = Buffer.from(lines.join("\n"))
     .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
@@ -39,9 +124,7 @@ export async function sendEmailViaGoogle(userId, recipientEmail, subject, body) 
   try {
     const response = await gmail.users.messages.send({
       userId: "me",
-      requestBody: {
-        raw: encodedMessage,
-      },
+      requestBody: { raw: encodedMessage },
     });
     
     console.log(`✅ Gmail email sent successfully. Message ID: ${response.data.id}`);
@@ -56,7 +139,13 @@ export async function sendEmailViaGoogle(userId, recipientEmail, subject, body) 
   }
 }
 
-export async function sendEmailViaOutlook(userId, recipientEmail, subject, body) {
+export async function sendEmailViaOutlook(
+  userId,
+  recipientEmail,
+  subject,
+  body,
+  attachmentUrls = []
+) {
   console.log(`📧 Starting Outlook email send to ${recipientEmail}`);
   
   const user = await getUser(userId);
@@ -67,6 +156,8 @@ export async function sendEmailViaOutlook(userId, recipientEmail, subject, body)
   const msToken = user.microsoft_access_token;
 
   try {
+    const attachments = await fetchAttachments(attachmentUrls);
+
     const response = await axios.post(
       "https://graph.microsoft.com/v1.0/me/sendMail",
       {
@@ -83,6 +174,12 @@ export async function sendEmailViaOutlook(userId, recipientEmail, subject, body)
               },
             },
           ],
+          attachments: attachments.map((att) => ({
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            name: att.filename,
+            contentType: att.mimeType,
+            contentBytes: att.base64,
+          })),
         },
         saveToSentItems: true,
       },
@@ -113,13 +210,20 @@ export async function sendEmailViaOutlook(userId, recipientEmail, subject, body)
   }
 }
 
-export async function sendEmail(userId, provider, recipientEmail, subject, body) {
+export async function sendEmail(
+  userId,
+  provider,
+  recipientEmail,
+  subject,
+  body,
+  attachmentUrls = []
+) {
   console.log(`\n🚀 sendEmail called: provider=${provider}, recipient=${recipientEmail}`);
   
   if (provider === "google") {
-    return await sendEmailViaGoogle(userId, recipientEmail, subject, body);
+    return await sendEmailViaGoogle(userId, recipientEmail, subject, body, attachmentUrls);
   } else if (provider === "microsoft") {
-    return await sendEmailViaOutlook(userId, recipientEmail, subject, body);
+    return await sendEmailViaOutlook(userId, recipientEmail, subject, body, attachmentUrls);
   } else {
     throw new Error(`Unknown email provider: ${provider}`);
   }
