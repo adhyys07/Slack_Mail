@@ -322,6 +322,23 @@ function registerCommands(app) {
               },
             },
           },
+          {
+            type: "input",
+            block_id: "send_later_block",
+            optional: true,
+            label: {
+              type: "plain_text",
+              text: "Send later (ISO datetime, UTC)",
+            },
+            element: {
+              type: "plain_text_input",
+              action_id: "send_later_input",
+              placeholder: {
+                type: "plain_text",
+                text: "2026-02-08T09:30:00Z",
+              },
+            },
+          },
         ],
       },
     });
@@ -330,6 +347,8 @@ function registerCommands(app) {
 
 function registerViews(app) {
   console.log("✅ Registering view handlers...");
+  // Simple in-memory scheduler (lost on restart)
+  const scheduledJobs = new Set();
   
   // Debug: Log all incoming requests
   app.use(async ({ body, next }) => {
@@ -359,6 +378,21 @@ function registerViews(app) {
         .split(/\r?\n/)
         .map((u) => u.trim())
         .filter(Boolean);
+      const sendLaterRaw = values.send_later_block?.send_later_input?.value?.trim() || "";
+
+      let delayMs = 0;
+      if (sendLaterRaw) {
+        const ts = Date.parse(sendLaterRaw);
+        if (Number.isNaN(ts)) {
+          await client.chat.postMessage({
+            channel: userId,
+            text: "❌ Invalid date/time. Use ISO like 2026-02-08T09:30:00Z",
+          });
+          return;
+        }
+        delayMs = ts - Date.now();
+        if (delayMs < 0) delayMs = 0;
+      }
 
       console.log("Form data extracted:", { provider, recipientEmail, subject: subject?.substring(0, 20) });
 
@@ -379,15 +413,35 @@ function registerViews(app) {
         return;
       }
 
-      // Send email
-      console.log(`Attempting to send email via ${provider}...`);
-      const result = await sendEmail(userId, provider, recipientEmail, subject, emailBody, attachmentUrls);
+      const doSend = async () => {
+        console.log(`Attempting to send email via ${provider}...`);
+        const result = await sendEmail(
+          userId,
+          provider,
+          recipientEmail,
+          subject,
+          emailBody,
+          attachmentUrls
+        );
+        await client.chat.postMessage({
+          channel: userId,
+          text: `✅ Email sent${delayMs ? " (scheduled)" : ""} via ${result.provider}!\n\nTo: ${recipientEmail}\nSubject: ${subject}`,
+        });
+      };
 
-      // Success response
-      await client.chat.postMessage({
-        channel: userId,
-        text: `✅ Email sent successfully via ${result.provider}!\n\nTo: ${recipientEmail}\nSubject: ${subject}`,
-      });
+      if (delayMs > 0) {
+        const timer = setTimeout(() => {
+          scheduledJobs.delete(timer);
+          void doSend();
+        }, delayMs);
+        scheduledJobs.add(timer);
+        await client.chat.postMessage({
+          channel: userId,
+          text: `⏳ Email scheduled for ${new Date(Date.now() + delayMs).toISOString()}`,
+        });
+      } else {
+        await doSend();
+      }
 
     } catch (error) {
       console.error("Email send failed:", error.message);
