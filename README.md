@@ -58,5 +58,26 @@ BASE_URL=https://server_url
 PORT=3000
 ```
 
+## Slack Bot Setup (Quick Guide)
+1) Create a Slack App: https://api.slack.com/apps → "Create New App" → From scratch.
+2) Basic info: Add name/icon and choose your workspace.
+3) OAuth & Permissions:
+	- Scopes (Bot Token): `commands`, `chat:write`, `files:write`, `im:history` (if needed), plus any others your flows require.
+	- Install to Workspace → copy `SLACK_BOT_TOKEN`.
+4) App Credentials: copy `SLACK_SIGNING_SECRET`.
+5) Slash Commands:
+	- /connect-email, /get-emails, /open-email, /reply-email, /send-email, /search-email, /clear-bot
+	- For each command set the Request URL to: `https://your-server.com/slack/events`
+6) Event Subscriptions:
+	- Enable events; Request URL: `https://your-server.com/slack/events`
+	- Subscribe to bot events if needed (e.g., `app_home_opened` if you add a home tab).
+7) Interactivity & Shortcuts:
+	- Enable and set Request URL: `https://your-server.com/slack/events`
+8) Environment:
+	- Set `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` in your hosting environment.
+9) Deploy:
+	- Ensure your server (Express + Bolt) listens on `/slack/events` and that your public BASE_URL matches the URLs above.
+10) Reinstall after scope or command changes.
+
 ## For Transparency
 I have used AI for bug fixing and code suggestions, also at some place to modify some features for this bot !
