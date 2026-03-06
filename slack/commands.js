@@ -1,13 +1,9 @@
 import axios from "axios";
 import { google } from "googleapis";
-import { getUser } from "../db/store.js";
+import { getUser, saveUser } from "../db/store.js";
 import { getGoogleTokens } from "../providers/googleTokens.js";
-import { fetchGmail } from "../providers/gmail.js";
-import { sendEmail } from "../services/emailSender.js";
-import {
-  listGmailAttachments,
-  listOutlookAttachments,
-} from "../services/attachments.js";
+import { sendEmail, ensureMicrosoftAccessToken } from "../services/emailSender.js";
+import { listGmailAttachments, listOutlookAttachments } from "../services/attachments.js";
 
 function registerCommands(app) {
   app.command("/connect-email", async ({ ack, command, respond }) => {
@@ -18,13 +14,13 @@ function registerCommands(app) {
 
     await respond({
       response_type: "in_channel",
-      text: "Connect your Gmail",
+      text: "Connect your email",
       blocks: [
         {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: "🔐 Click below to connect your Gmail account.",
+            text: "🔐 Click below to connect your email account.",
           },
         },
         {
@@ -39,7 +35,7 @@ function registerCommands(app) {
               type: "button",
               text: { type: "plain_text", text: "Connect Microsoft" },
               url: microsoftAuthUrl,
-            }
+            },
           ],
         },
       ],
@@ -53,22 +49,22 @@ function registerCommands(app) {
       const userId = command.user_id;
       const userMail = await getUser(userId);
 
-      // Check for Google tokens (stored in file system)
       let googleStatus = "❌ Not connected";
       try {
         const googleTokens = await getGoogleTokens(userId);
-        console.log("Google tokens for user:", googleTokens);
         if (googleTokens) googleStatus = "✅ Connected";
       } catch (err) {
         googleStatus = "❌ Not connected";
-        console.error("Error checking Google tokens:", err.message);
       }
 
-      // Check for Microsoft tokens (stored in Redis)
       let microsoftStatus = "❌ Not connected";
-      console.log("User mail data:", userMail);
-      if (userMail && userMail.microsoft_provider === "microsoft" && userMail.microsoft_access_token) {
-        microsoftStatus = "✅ Connected";
+      if (userMail && userMail.microsoft_provider === "microsoft" && userMail.microsoft_refresh_token) {
+        try {
+          await ensureMicrosoftAccessToken(userId);
+          microsoftStatus = "✅ Connected";
+        } catch (e) {
+          microsoftStatus = "❌ Not connected";
+        }
       }
 
       await respond({
@@ -125,7 +121,7 @@ function registerCommands(app) {
 
     try {
       if (provider.startsWith("g")) {
-        const oauth2Client = await getGoogleTokens(command.user_id);
+        const oauth2Client = await ensureGoogleAuth(command.user_id);
         const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
         const list = await gmail.users.messages.list({
@@ -157,16 +153,12 @@ function registerCommands(app) {
 
         await client.chat.postMessage({ channel: command.channel_id, text: `*From:* ${from}\n*Subject:* ${subject}\n*Date:* ${date}\n\n${text.slice(0, 4000)}` });
       } else {
-        const user = await getUser(command.user_id);
-        if (!user || !user.microsoft_access_token) {
-          await client.chat.postMessage({ channel: command.channel_id, text: "❌ Microsoft/Outlook not connected. Use `/connect-email` first." });
-          return;
-        }
+        const msAccessToken = await ensureMicrosoftAccessToken(command.user_id);
 
         const list = await axios.get(
           "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$top=5&$select=id,from,subject,receivedDateTime&$orderby=receivedDateTime%20desc",
           {
-            headers: { Authorization: `Bearer ${user.microsoft_access_token}` },
+            headers: { Authorization: `Bearer ${msAccessToken}` },
           }
         );
 
@@ -180,7 +172,7 @@ function registerCommands(app) {
         const detail = await axios.get(
           `https://graph.microsoft.com/v1.0/me/messages/${msgMeta.id}?$select=from,subject,receivedDateTime,body`,
           {
-            headers: { Authorization: `Bearer ${user.microsoft_access_token}` },
+            headers: { Authorization: `Bearer ${msAccessToken}` },
           }
         );
 
@@ -214,7 +206,7 @@ function registerCommands(app) {
 
     try {
       if (provider.startsWith("g")) {
-        const oauth2Client = await getGoogleTokens(command.user_id);
+        const oauth2Client = await ensureGoogleAuth(command.user_id);
         const gmail = google.gmail({ version: "v1", auth: oauth2Client });
         const list = await gmail.users.messages.list({
           userId: "me",
@@ -255,15 +247,11 @@ function registerCommands(app) {
     });
       await client.chat.postMessage({ channel: command.channel_id, text: "✅ Reply sent via Gmail!" });
       } else {
-        const user = await getUser(command.user_id);
-        if (!user || !user.microsoft_access_token) {
-          await client.chat.postMessage({ channel: command.channel_id, text: "❌ Microsoft/Outlook not connected. Use `/connect-email` first." });
-          return;
-        }
+        const msAccessToken = await ensureMicrosoftAccessToken(command.user_id);
 
         const list = await axios.get(
           "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$top=5&$select=id,from,subject,conversationId&$orderby=receivedDateTime desc",
-          {headers: { Authorization: `Bearer ${user.microsoft_access_token}` }}
+          {headers: { Authorization: `Bearer ${msAccessToken}` }}
         );
         const messages = list.data.value || [];
         const msgMeta = messages[idx - 1];
@@ -275,7 +263,7 @@ function registerCommands(app) {
         await axios.post(
           `https://graph.microsoft.com/v1.0/me/messages/${msgMeta.id}/reply`,
           { comment: bodyText },
-          { headers: { Authorization: `Bearer ${user.microsoft_access_token}` } }
+          { headers: { Authorization: `Bearer ${msAccessToken}` } }
         );
         await client.chat.postMessage({ channel: command.channel_id, text: "✅ Reply sent via Outlook!" });
       }
@@ -305,7 +293,7 @@ function registerCommands(app) {
 
       if (normalizedProvider === "google") {
         try {
-          const oauth2Client = await getGoogleTokens(userId);
+          const oauth2Client = await ensureGoogleAuth(userId);
           const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
           const response = await gmail.users.messages.list({
@@ -370,19 +358,13 @@ function registerCommands(app) {
           await client.chat.postMessage({ channel: command.channel_id, text: "❌ Gmail not connected or error fetching emails. Use `/connect-email` first." });
         }
       } else {
-        const user = await getUser(userId);
-
-        if (!user || !user.microsoft_access_token) {
-          await client.chat.postMessage({ channel: command.channel_id, text: "❌ Microsoft/Outlook not connected. Use `/connect-email` first." });
-          return;
-        }
-
         try {
+          const msAccessToken = await ensureMicrosoftAccessToken(userId);
           const response = await axios.get(
             `https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$top=${pageSize}&$select=id,from,subject,receivedDateTime&$orderby=receivedDateTime desc${cursor ? `&$skiptoken=${encodeURIComponent(cursor)}` : ""}`,
             {
               headers: {
-                Authorization: `Bearer ${user.microsoft_access_token}`,
+                Authorization: `Bearer ${msAccessToken}`,
               },
             }
           );
@@ -416,7 +398,7 @@ function registerCommands(app) {
                 for (const att of attachments) {
                   if (att["@odata.type"] && att["@odata.type"] !== "#microsoft.graph.fileAttachment") continue;
                   try {
-                    const { data, contentType } = await fetchOutlookAttachmentBody(user.microsoft_access_token, msg.id, att.id);
+                    const { data, contentType } = await fetchOutlookAttachmentBody(msAccessToken, msg.id, att.id);
                     await uploadToSlackFile(client, command.channel_id, att.filename || att.name, contentType || att.mimeType, data);
                   } catch (e) {
                     console.error("Outlook attachment upload error:", e.message);
@@ -454,7 +436,7 @@ function registerCommands(app) {
 
     try{
       if (provider.startsWith("g")) {
-        const oauth2Client = await getGoogleTokens(command.user_id);
+        const oauth2Client = await ensureGoogleAuth(command.user_id);
         const gmail = google.gmail({ version: "v1", auth: oauth2Client });
         const response = await gmail.users.messages.list({
           userId: "me",
@@ -482,14 +464,10 @@ function registerCommands(app) {
         }
         await client.chat.postMessage({ channel: command.channel_id, text });
       } else {
-        const user = await getUser(command.user_id);
-        if (!user || !user.microsoft_access_token) {
-          await client.chat.postMessage({ channel: command.channel_id, text: "❌ Microsoft/Outlook not connected. Use `/connect-email` first." });
-          return;
-        }
+        const msAccessToken = await ensureMicrosoftAccessToken(command.user_id);
         const resp = await axios.get(
           `https://graph.microsoft.com/v1.0/me/messages?$search="${query}"&$top=5&$select=id,from,subject,receivedDateTime`,
-          { headers: { Authorization: `Bearer ${user.microsoft_access_token}` } }
+          { headers: { Authorization: `Bearer ${msAccessToken}` } }
         );
         const messages = resp.data.value || [];
         if (!messages.length) {
@@ -662,6 +640,26 @@ function stripHtml(html) {
 function shortenLinks(text) {
   if (!text) return "";
   return text.replace(/https?:\/\/\S+/gi, (url) => `<${url}|link>`);
+}
+
+async function ensureGoogleAuth(userId) {
+  const oauth2Client = await getGoogleTokens(userId);
+  try {
+    const { token } = await oauth2Client.getAccessToken();
+    if (token) {
+      const user = await getUser(userId);
+      await saveUser(userId, {
+        ...user,
+        google_tokens: { ...oauth2Client.credentials, access_token: token },
+        google_access_token: token,
+        google_refresh_token:
+          oauth2Client.credentials.refresh_token || user?.google_refresh_token,
+      });
+    }
+  } catch (err) {
+    console.error("Google token refresh failed:", err.message);
+  }
+  return oauth2Client;
 }
 
 async function uploadToSlackFile(client, channel, filename, mimeType, dataBuffer) {
