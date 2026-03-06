@@ -7,15 +7,19 @@
 3) Click your provider, for now its only Google & Microsoft.Once you authorize the access you will be able to use the full potential of the bot
 
 <u>**Commands**</u>
-* **/connect-email**: Allows the user to connect their inbox within slack.
-* **/get-emails**: It will grab the user emails. It requires inbox parameters.
-	- Usage: `/get-emails google` or `/get-emails outlook`
-	- Returns the last 5 inbox messages and shows attachment links (click to download)
-* **/open-email**: This command will allow the user to access to full content of a specific email
-    - Usage: To view a specific email body, use `/open-email gmail 1` or `/open-email outlook 1` (indexes 1–5)
-* **/send-email**: It will open a dialog box to select all the info required to send an email from your authorized inbox.
-* **/check-accounts**: It helps us to verify if the account is logged in or not.
-* **/clear-bot**: It clears all the messages in the bot to maintain privacy
+* **/connect-email**: Connect Gmail or Outlook.
+* **/check-accounts**: Show connection status.
+* **/get-emails**: List inbox emails.
+	- Usage: `/get-emails gmail [pageSize] [nextToken] [upload]` or `/get-emails outlook [pageSize] [skiptoken] [upload]`
+	- Defaults to 5; max 50. Include `upload` to also upload attachments to Slack.
+* **/open-email**: View full content of a specific email.
+	- Usage: `/open-email gmail 1` or `/open-email outlook 2` (indexes from the latest fetch)
+* **/reply-email**: Reply to a listed email.
+	- Usage: `/reply-email gmail 1 Thanks for the update` (indexes 1–5 from latest fetch)
+* **/search-email**: Search inbox and get quick open links.
+	- Usage: `/search-email gmail invoice` or `/search-email outlook project`
+* **/send-email**: Opens modal to send email (supports attachments, schedule).
+* **/clear-bot**: Clears bot messages in the channel.
 
 
 ## Features !
