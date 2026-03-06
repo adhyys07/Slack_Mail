@@ -11,6 +11,8 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "googleapis": "^140.0.0",
-    "ioredis": "^5.9.2"
+    "imap": "^0.8.19",
+    "ioredis": "^5.9.2",
+    "mailparser": "^3.9.3"
   }
 }
