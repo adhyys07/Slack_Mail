@@ -149,8 +149,9 @@ function registerCommands(app) {
         const from = headers.find((h) => h.name === "From")?.value || "Unknown";
         const subject = headers.find((h) => h.name === "Subject")?.value || "No Subject";
         const date = headers.find((h) => h.name === "Date")?.value || "";
-        const text =
+        const textRaw =
           extractGmailPlainText(full.data.payload) || full.data.snippet || "(No body available)";
+        const text = shortenLinks(textRaw);
 
         await respond(`*From:* ${from}\n*Subject:* ${subject}\n*Date:* ${date}\n\n${text.slice(0, 4000)}`);
       } else {
@@ -185,11 +186,12 @@ function registerCommands(app) {
         const subject = detail.data.subject || "No Subject";
         const date = detail.data.receivedDateTime || "";
         const bodyContent = detail.data.body?.content || "";
-        const text = (detail.data.body?.contentType || "").toLowerCase() === "html"
+        const textRaw = (detail.data.body?.contentType || "").toLowerCase() === "html"
           ? stripHtml(bodyContent)
           : bodyContent;
+        const text = shortenLinks(textRaw || "(No body available)");
 
-        await respond(`*From:* ${from}\n*Subject:* ${subject}\n*Date:* ${date}\n\n${(text || "(No body available)").slice(0, 4000)}`);
+        await respond(`*From:* ${from}\n*Subject:* ${subject}\n*Date:* ${date}\n\n${text.slice(0, 4000)}`);
       }
     } catch (err) {
       console.error("open-email error:", err.message);
@@ -459,6 +461,11 @@ function decodeBase64Url(data) {
 function stripHtml(html) {
   if (!html) return "";
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function shortenLinks(text) {
+  if (!text) return "";
+  return text.replace(/https?:\/\/\S+/gi, (url) => `<${url}|link>`);
 }
 
 function extractGmailPlainText(payload) {
