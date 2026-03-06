@@ -163,7 +163,7 @@ function registerCommands(app) {
             if (attachments.length) {
               attachments.forEach((att) => {
                 const url = `${process.env.BASE_URL}/attachment/gmail/${msg.id}/${att.id}?user=${userId}&filename=${encodeURIComponent(att.filename)}&type=${encodeURIComponent(att.mimeType)}`;
-                emailText += `📎 ${att.filename} (${Math.round(att.size / 1024)} KB)\n${url}\n\n`;
+                emailText += `📎 <${url}|${att.filename}> (${Math.round(att.size / 1024)} KB)\n\n`;
               });
             }
           }
@@ -210,7 +210,7 @@ function registerCommands(app) {
             if (attachments.length) {
               attachments.forEach((att) => {
                 const url = `${process.env.BASE_URL}/attachment/outlook/${msg.id}/${att.id}?user=${userId}&filename=${encodeURIComponent(att.filename)}&type=${encodeURIComponent(att.mimeType)}`;
-                emailText += `📎 ${att.filename} (${Math.round(att.size / 1024)} KB)\n${url}\n\n`;
+                emailText += `📎 <${url}|${att.filename}> (${Math.round(att.size / 1024)} KB)\n\n`;
               });
             }
           }
