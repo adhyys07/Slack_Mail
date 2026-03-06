@@ -131,18 +131,18 @@ function registerCommands(app) {
 
           const response = await gmail.users.messages.list({
             userId: "me",
-            q: "is:unread category:primary",
+            q: "category:primary",
             maxResults: 5,
           });
 
           const messages = response.data.messages || [];
 
           if (messages.length === 0) {
-            await respond("✅ No unread emails in Gmail primary inbox!");
+            await respond("✅ No emails found in Gmail primary inbox.");
             return;
           }
 
-          let emailText = `📧 *Unread Gmail (${messages.length})*\n\n`;
+          let emailText = `📧 *Gmail (last ${messages.length})*\n\n`;
 
           for (const msg of messages) {
             const detail = await gmail.users.messages.get({
@@ -183,7 +183,7 @@ function registerCommands(app) {
 
         try {
           const response = await axios.get(
-            "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$filter=isRead eq false&$top=5&$select=id,from,subject,receivedDateTime",
+            "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$top=5&$select=id,from,subject,receivedDateTime&$orderby=receivedDateTime desc",
             {
               headers: {
                 Authorization: `Bearer ${user.microsoft_access_token}`,
@@ -194,11 +194,11 @@ function registerCommands(app) {
           const messages = response.data.value || [];
 
           if (messages.length === 0) {
-            await respond("✅ No unread emails in Outlook inbox!");
+            await respond("✅ No emails found in Outlook inbox.");
             return;
           }
 
-          let emailText = `📧 *Unread Outlook (${messages.length})*\n\n`;
+          let emailText = `📧 *Outlook (last ${messages.length})*\n\n`;
 
           for (const msg of messages) {
             const from = msg.from?.emailAddress?.address || "Unknown";
