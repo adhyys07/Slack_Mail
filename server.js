@@ -19,15 +19,19 @@ initMicrosoftOAuth(app);
 app.get("/attachment/:provider/:messageId/:attachmentId", async (req, res) => {
   const { provider, messageId, attachmentId } = req.params;
   const userId = req.query.user;
+  const downloadName = req.query.filename || "attachment.bin";
+  const downloadType = req.query.type || "application/octet-stream";
   if (!userId) return res.status(401).send("Unauthorized: Missing user ID");
   try {
     if (provider === "gmail") {
       const { buffer } = await downloadGmailAttachment(userId, messageId, attachmentId);
-      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Type", downloadType);
+      res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
       res.send(buffer);
     } else if (provider === "outlook") {
       const { buffer } = await downloadOutlookAttachment(userId, messageId, attachmentId);
-      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Type", downloadType);
+      res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
       res.send(buffer);
     }
     return res.status(400).send("Invalid provider");
