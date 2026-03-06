@@ -110,6 +110,93 @@ function registerCommands(app) {
     }
   });
 
+  app.command("/open-email", async ({ ack, command, respond }) => {
+    await ack();
+    const [providerRaw, indexRaw] = (command.text || "").trim().split(/\s+/);
+    const provider = (providerRaw || "").toLowerCase();
+    const idx = Math.min(5, Math.max(1, Number(indexRaw) || 1));
+
+    if (!["google", "gmail", "microsoft", "outlook"].includes(provider)) {
+      await respond("❌ Use: `/open-email gmail 1` or `/open-email outlook 2` (1–5)");
+      return;
+    }
+
+    try {
+      if (provider.startsWith("g")) {
+        const oauth2Client = await getGoogleTokens(command.user_id);
+        const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+        const list = await gmail.users.messages.list({
+          userId: "me",
+          q: "category:primary",
+          maxResults: 5,
+        });
+
+        const messages = list.data.messages || [];
+        const msgMeta = messages[idx - 1];
+        if (!msgMeta) {
+          await respond(`❌ No email found at index ${idx} in Gmail.`);
+          return;
+        }
+
+        const full = await gmail.users.messages.get({
+          userId: "me",
+          id: msgMeta.id,
+          format: "full",
+        });
+
+        const headers = full.data.payload.headers || [];
+        const from = headers.find((h) => h.name === "From")?.value || "Unknown";
+        const subject = headers.find((h) => h.name === "Subject")?.value || "No Subject";
+        const date = headers.find((h) => h.name === "Date")?.value || "";
+        const text =
+          extractGmailPlainText(full.data.payload) || full.data.snippet || "(No body available)";
+
+        await respond(`*From:* ${from}\n*Subject:* ${subject}\n*Date:* ${date}\n\n${text.slice(0, 4000)}`);
+      } else {
+        const user = await getUser(command.user_id);
+        if (!user || !user.microsoft_access_token) {
+          await respond("❌ Microsoft/Outlook not connected. Use `/connect-email` first.");
+          return;
+        }
+
+        const list = await axios.get(
+          "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$top=5&$select=id,from,subject,receivedDateTime&$orderby=receivedDateTime%20desc",
+          {
+            headers: { Authorization: `Bearer ${user.microsoft_access_token}` },
+          }
+        );
+
+        const messages = list.data.value || [];
+        const msgMeta = messages[idx - 1];
+        if (!msgMeta) {
+          await respond(`❌ No email found at index ${idx} in Outlook.`);
+          return;
+        }
+
+        const detail = await axios.get(
+          `https://graph.microsoft.com/v1.0/me/messages/${msgMeta.id}?$select=from,subject,receivedDateTime,body`,
+          {
+            headers: { Authorization: `Bearer ${user.microsoft_access_token}` },
+          }
+        );
+
+        const from = detail.data.from?.emailAddress?.address || "Unknown";
+        const subject = detail.data.subject || "No Subject";
+        const date = detail.data.receivedDateTime || "";
+        const bodyContent = detail.data.body?.content || "";
+        const text = (detail.data.body?.contentType || "").toLowerCase() === "html"
+          ? stripHtml(bodyContent)
+          : bodyContent;
+
+        await respond(`*From:* ${from}\n*Subject:* ${subject}\n*Date:* ${date}\n\n${(text || "(No body available)").slice(0, 4000)}`);
+      }
+    } catch (err) {
+      console.error("open-email error:", err.message);
+      await respond("❌ Error opening email. Please try again.");
+    }
+  });
+
   app.command("/get-emails", async ({ command, ack, respond }) => {
     await ack();
 
@@ -365,7 +452,31 @@ function registerCommands(app) {
     });
   });
 }
+function decodeBase64Url(data) {
+  return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+}
 
+function stripHtml(html) {
+  if (!html) return "";
+  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function extractGmailPlainText(payload) {
+  if (!payload) return "";
+  if (payload.mimeType === "text/plain" && payload.body?.data) {
+    return decodeBase64Url(payload.body.data);
+  }
+  if (payload.mimeType === "text/html" && payload.body?.data) {
+    return stripHtml(decodeBase64Url(payload.body.data));
+  }
+  if (payload.parts) {
+    for (const p of payload.parts) {
+      const text = extractGmailPlainText(p);
+      if (text) return text;
+    }
+  }
+  return "";
+}
 function registerViews(app) {
   console.log("✅ Registering view handlers...");
   // Simple in-memory scheduler (lost on restart)

@@ -3,9 +3,8 @@ import { google } from "googleapis";
 import { getUser, saveUser } from "../db/store.js";
 
 const MAX_ATTACHMENTS = 3;
-const MAX_BYTES_PER_FILE = 5 * 1024 * 1024; // 5MB
+const MAX_BYTES_PER_FILE = 5 * 1024 * 1024; 
 
-// Refresh Microsoft access token if expired (1 min buffer)
 export async function ensureMicrosoftAccessToken(userId) {
   const user = await getUser(userId);
   if (!user || !user.microsoft_refresh_token) {
@@ -18,7 +17,7 @@ export async function ensureMicrosoftAccessToken(userId) {
     user.microsoft_expires_at &&
     user.microsoft_expires_at > now + 60_000
   ) {
-    return user.microsoft_access_token; // still valid
+    return user.microsoft_access_token;
   }
 
   const resp = await axios.post(
