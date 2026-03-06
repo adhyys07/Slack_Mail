@@ -17,6 +17,7 @@ function registerCommands(app) {
     const microsoftAuthUrl = `${process.env.BASE_URL}/auth/microsoft?user=${command.user_id}`;
 
     await respond({
+      response_type: "in_channel",
       text: "Connect your Gmail",
       blocks: [
         {
@@ -71,6 +72,7 @@ function registerCommands(app) {
       }
 
       await respond({
+        response_type: "in_channel",
         text: "Email Account Status",
         blocks: [
           {
@@ -84,7 +86,7 @@ function registerCommands(app) {
       });
     } catch (err) {
       console.error("check-accounts error:", err);
-      await respond("❌ Error checking accounts. Please try again later.");
+      await respond({ response_type: "in_channel", text: "❌ Error checking accounts. Please try again later." });
     }
   });
 
@@ -110,14 +112,14 @@ function registerCommands(app) {
     }
   });
 
-  app.command("/open-email", async ({ ack, command, respond }) => {
+  app.command("/open-email", async ({ ack, command, respond, client }) => {
     await ack();
     const [providerRaw, indexRaw] = (command.text || "").trim().split(/\s+/);
     const provider = (providerRaw || "").toLowerCase();
     const idx = Math.min(5, Math.max(1, Number(indexRaw) || 1));
 
     if (!["google", "gmail", "microsoft", "outlook"].includes(provider)) {
-      await respond("❌ Use: `/open-email gmail 1` or `/open-email outlook 2` (1–5)");
+      await client.chat.postMessage({ channel: command.channel_id, text: "❌ Use: `/open-email gmail 1` or `/open-email outlook 2` (1–5)" });
       return;
     }
 
@@ -135,7 +137,7 @@ function registerCommands(app) {
         const messages = list.data.messages || [];
         const msgMeta = messages[idx - 1];
         if (!msgMeta) {
-          await respond(`❌ No email found at index ${idx} in Gmail.`);
+          await client.chat.postMessage({ channel: command.channel_id, text: `❌ No email found at index ${idx} in Gmail.` });
           return;
         }
 
@@ -153,11 +155,11 @@ function registerCommands(app) {
           extractGmailPlainText(full.data.payload) || full.data.snippet || "(No body available)";
         const text = shortenLinks(textRaw);
 
-        await respond(`*From:* ${from}\n*Subject:* ${subject}\n*Date:* ${date}\n\n${text.slice(0, 4000)}`);
+        await client.chat.postMessage({ channel: command.channel_id, text: `*From:* ${from}\n*Subject:* ${subject}\n*Date:* ${date}\n\n${text.slice(0, 4000)}` });
       } else {
         const user = await getUser(command.user_id);
         if (!user || !user.microsoft_access_token) {
-          await respond("❌ Microsoft/Outlook not connected. Use `/connect-email` first.");
+          await client.chat.postMessage({ channel: command.channel_id, text: "❌ Microsoft/Outlook not connected. Use `/connect-email` first." });
           return;
         }
 
@@ -171,7 +173,7 @@ function registerCommands(app) {
         const messages = list.data.value || [];
         const msgMeta = messages[idx - 1];
         if (!msgMeta) {
-          await respond(`❌ No email found at index ${idx} in Outlook.`);
+          await client.chat.postMessage({ channel: command.channel_id, text: `❌ No email found at index ${idx} in Outlook.` });
           return;
         }
 
@@ -191,23 +193,111 @@ function registerCommands(app) {
           : bodyContent;
         const text = shortenLinks(textRaw || "(No body available)");
 
-        await respond(`*From:* ${from}\n*Subject:* ${subject}\n*Date:* ${date}\n\n${text.slice(0, 4000)}`);
+        await client.chat.postMessage({ channel: command.channel_id, text: `*From:* ${from}\n*Subject:* ${subject}\n*Date:* ${date}\n\n${text.slice(0, 4000)}` });
       }
     } catch (err) {
       console.error("open-email error:", err.message);
-      await respond("❌ Error opening email. Please try again.");
+      await client.chat.postMessage({ channel: command.channel_id, text: "❌ Error opening email. Please try again." });
+    }
+  });
+  app.command("/reply-email",async ({ ack, command, client }) => {
+    await ack();
+    const [providerRaw, idxRaw, ...rest] = (command.text || "").trim().split(/\s+/);
+    const provider = (providerRaw || "").toLowerCase();
+    const idx = Math.min(5, Math.max(1, Number(idxRaw) || 1));
+    const bodyText = rest.join(" ").trim();
+
+    if (!["google", "gmail", "microsoft", "outlook"].includes(provider) || !bodyText ) {
+      await client.chat.postMessage({ channel: command.channel_id, text: "❌ Use: `/reply-email gmail 1 Your reply here`" });
+      return;
+    }
+
+    try {
+      if (provider.startsWith("g")) {
+        const oauth2Client = await getGoogleTokens(command.user_id);
+        const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+        const list = await gmail.users.messages.list({
+          userId: "me",
+          q: "category:primary",
+          maxResults: 5,
+        });
+        const messages = list.data.messages || [];
+        const msgMeta = messages[idx - 1];
+        if (!msgMeta) {
+          await client.chat.postMessage({ channel: command.channel_id, text: `❌ No email found at index ${idx} in Gmail.` });
+          return;
+        }
+
+        const full = await gmail.users.messages.get({
+          userId: "me",
+          id: msgMeta.id,
+          format: "full"
+        });
+        const headers = full.data.payload.headers || [];
+        const subject = headers.find((h) => h.name === "Subject")?.value || "No Subject";
+        const inReplyTo = headers.find((h) => h.name === "Message-ID")?.value;
+        const refs = headers.find((h) => h.name === "References")?.value || "";
+
+        const rawLines = [
+          `To: ${headers.find((h) => h.name === "Reply-To")?.value || headers.find((h) => h.name === "From")?.value || ""}`,
+          `Subject: Re: ${subject}`,
+          `In-Reply-To: ${inReplyTo || ""}`,
+          `References: ${refs}`,
+          "Content-Type: text/plain; charset=\"UTF-8\"",
+          "",
+        bodyText,
+      ];
+      const raw = Buffer.from(rawLines.join("\r\n")).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+      await gmail.users.messages.send({
+        userId: "me",
+        requestBody: { raw, threadId: full.data.threadId }
+    });
+      await client.chat.postMessage({ channel: command.channel_id, text: "✅ Reply sent via Gmail!" });
+      } else {
+        const user = await getUser(command.user_id);
+        if (!user || !user.microsoft_access_token) {
+          await client.chat.postMessage({ channel: command.channel_id, text: "❌ Microsoft/Outlook not connected. Use `/connect-email` first." });
+          return;
+        }
+
+        const list = await axios.get(
+          "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$top=5&$select=id,from,subject,conversationId&$orderby=receivedDateTime desc",
+          {headers: { Authorization: `Bearer ${user.microsoft_access_token}` }}
+        );
+        const messages = list.data.value || [];
+        const msgMeta = messages[idx - 1];
+        if (!msgMeta) {
+          await client.chat.postMessage({ channel: command.channel_id, text: `❌ No email found at index ${idx} in Outlook.` });
+          return;
+        }
+
+        await axios.post(
+          `https://graph.microsoft.com/v1.0/me/messages/${msgMeta.id}/reply`,
+          { comment: bodyText },
+          { headers: { Authorization: `Bearer ${user.microsoft_access_token}` } }
+        );
+        await client.chat.postMessage({ channel: command.channel_id, text: "✅ Reply sent via Outlook!" });
+      }
+    } catch (err) {
+      console.error("reply-email error:", err.message);
+      await client.chat.postMessage({ channel: command.channel_id, text: "❌ Error sending reply. Please try again." });
     }
   });
 
-  app.command("/get-emails", async ({ command, ack, respond }) => {
+  app.command("/get-emails", async ({ command, ack, respond, client }) => {
     await ack();
 
     try {
       const userId = command.user_id;
-      const provider = command.text.trim().toLowerCase();
+      const parts = (command.text || "").trim().split(/\s+/).filter(Boolean);
+      const provider = (parts[0] || "").toLowerCase();
+      const pageSize = Math.min(50, Math.max(1, Number(parts[1]) || 5));
+      const uploadFlag = parts.includes("upload");
+      const cursor = parts.find((p, idx) => idx > 1 && p !== "upload") || "";
 
       if (!provider || !["google", "gmail", "microsoft", "outlook"].includes(provider)) {
-        await respond("❌ Please specify a provider: `/get-emails google` or `/get-emails microsoft`");
+        await client.chat.postMessage({ channel: command.channel_id, text: "❌ Please specify a provider: `/get-emails google` or `/get-emails microsoft`" });
         return;
       }
 
@@ -221,13 +311,15 @@ function registerCommands(app) {
           const response = await gmail.users.messages.list({
             userId: "me",
             q: "category:primary",
-            maxResults: 5,
+            maxResults: pageSize,
+            pageToken: cursor || undefined,
           });
 
           const messages = response.data.messages || [];
+          const nextToken = response.data.nextPageToken;
 
           if (messages.length === 0) {
-            await respond("✅ No emails found in Gmail primary inbox.");
+            await client.chat.postMessage({ channel: command.channel_id, text: "✅ No emails found in Gmail primary inbox." });
             return;
           }
 
@@ -254,25 +346,40 @@ function registerCommands(app) {
                 const url = `${process.env.BASE_URL}/attachment/gmail/${msg.id}/${att.id}?user=${userId}&filename=${encodeURIComponent(att.filename)}&type=${encodeURIComponent(att.mimeType)}`;
                 emailText += `📎 <${url}|${att.filename}> (${Math.round(att.size / 1024)} KB)\n\n`;
               });
+
+              if (uploadFlag) {
+                for (const att of attachments) {
+                  try {
+                    const buf = await fetchGmailAttachmentBody(gmail, msg.id, att.id);
+                    await uploadToSlackFile(client, command.channel_id, att.filename, att.mimeType, buf);
+                  } catch (e) {
+                    console.error("Gmail attachment upload error:", e.message);
+                  }
+                }
+              }
             }
           }
 
-          await respond(emailText);
+          if (nextToken) {
+            emailText += `➡️ Next page: /get-emails gmail ${pageSize} ${nextToken}\n\n`;
+          }
+
+          await client.chat.postMessage({ channel: command.channel_id, text: emailText });
         } catch (err) {
           console.error("Gmail fetch error:", err);
-          await respond("❌ Gmail not connected or error fetching emails. Use `/connect-email` first.");
+          await client.chat.postMessage({ channel: command.channel_id, text: "❌ Gmail not connected or error fetching emails. Use `/connect-email` first." });
         }
       } else {
         const user = await getUser(userId);
 
         if (!user || !user.microsoft_access_token) {
-          await respond("❌ Microsoft/Outlook not connected. Use `/connect-email` first.");
+          await client.chat.postMessage({ channel: command.channel_id, text: "❌ Microsoft/Outlook not connected. Use `/connect-email` first." });
           return;
         }
 
         try {
           const response = await axios.get(
-            "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$top=5&$select=id,from,subject,receivedDateTime&$orderby=receivedDateTime desc",
+            `https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$top=${pageSize}&$select=id,from,subject,receivedDateTime&$orderby=receivedDateTime desc${cursor ? `&$skiptoken=${encodeURIComponent(cursor)}` : ""}`,
             {
               headers: {
                 Authorization: `Bearer ${user.microsoft_access_token}`,
@@ -281,9 +388,12 @@ function registerCommands(app) {
           );
 
           const messages = response.data.value || [];
+          const nextLink = response.data["@odata.nextLink"] || "";
+          const nextTokenMatch = nextLink.match(/\$skiptoken=([^&]+)/);
+          const nextToken = nextTokenMatch ? decodeURIComponent(nextTokenMatch[1]) : "";
 
           if (messages.length === 0) {
-            await respond("✅ No emails found in Outlook inbox.");
+            await client.chat.postMessage({ channel: command.channel_id, text: "✅ No emails found in Outlook inbox." });
             return;
           }
 
@@ -301,21 +411,107 @@ function registerCommands(app) {
                 const url = `${process.env.BASE_URL}/attachment/outlook/${msg.id}/${att.id}?user=${userId}&filename=${encodeURIComponent(att.filename)}&type=${encodeURIComponent(att.mimeType)}`;
                 emailText += `📎 <${url}|${att.filename}> (${Math.round(att.size / 1024)} KB)\n\n`;
               });
+
+              if (uploadFlag) {
+                for (const att of attachments) {
+                  if (att["@odata.type"] && att["@odata.type"] !== "#microsoft.graph.fileAttachment") continue;
+                  try {
+                    const { data, contentType } = await fetchOutlookAttachmentBody(user.microsoft_access_token, msg.id, att.id);
+                    await uploadToSlackFile(client, command.channel_id, att.filename || att.name, contentType || att.mimeType, data);
+                  } catch (e) {
+                    console.error("Outlook attachment upload error:", e.message);
+                  }
+                }
+              }
             }
           }
 
-          await respond(emailText);
+          if (nextToken) {
+            emailText += `➡️ Next page: /get-emails outlook ${pageSize} ${nextToken}\n\n`;
+          }
+
+          await client.chat.postMessage({ channel: command.channel_id, text: emailText });
         } catch (err) {
           console.error("Outlook fetch error:", err);
-          await respond("❌ Error fetching Outlook emails. Token may be expired.");
+          await client.chat.postMessage({ channel: command.channel_id, text: "❌ Error fetching Outlook emails. Token may be expired." });
         }
       }
     } catch (err) {
       console.error("get-emails error:", err);
-      await respond("❌ Error fetching emails. Please try again later.");
+      await client.chat.postMessage({ channel: command.channel_id, text: "❌ Error fetching emails. Please try again later." });
     }
   });
 
+  app.command("/search-email", async ({ command, ack, client }) => {
+    await ack();
+    const [providerRaw, ...queryParts] = (command.text || "").trim().split(/\s+/);
+    const provider = (providerRaw || "").toLowerCase();
+    const query = queryParts.join(" ").trim();
+    if (!["google", "gmail", "microsoft", "outlook"].includes(provider) || !query) {
+      await client.chat.postMessage({ channel: command.channel_id, text: "❌ Use: `/search-email google your search query`" });
+      return;
+    }
+
+    try{
+      if (provider.startsWith("g")) {
+        const oauth2Client = await getGoogleTokens(command.user_id);
+        const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+        const response = await gmail.users.messages.list({
+          userId: "me",
+          q: query,
+          maxResults: 5,
+        });
+        const messages = response.data.messages || [];
+        if (!messages.length) {
+          await client.chat.postMessage({ channel: command.channel_id, text: "✅ No matching emails found in Gmail." });
+          return;
+        }
+        let text = `🔎 *Gmail search* (“${query}”) — ${messages.length} found (showing up to 5)\n\n`;
+        for (let i = 0; i < messages.length; i++) {
+          const msg = messages[i];
+          const detail = await gmail.users.messages.get({
+            userId: "me",
+            id: msg.id,
+            format: "metadata",
+            metadataHeaders: ["From", "Subject"],
+          });
+          const headers = detail.data.payload.headers;
+          const from = headers.find((h) => h.name === "From")?.value || "Unknown";
+          const subject = headers.find((h) => h.name === "Subject")?.value || "No Subject";
+          text += `${i+1}. *From:* ${from}\n   *Subject:* ${subject}\n   → /open-email gmail ${i+1}\n\n`;
+        }
+        await client.chat.postMessage({ channel: command.channel_id, text });
+      } else {
+        const user = await getUser(command.user_id);
+        if (!user || !user.microsoft_access_token) {
+          await client.chat.postMessage({ channel: command.channel_id, text: "❌ Microsoft/Outlook not connected. Use `/connect-email` first." });
+          return;
+        }
+        const resp = await axios.get(
+          `https://graph.microsoft.com/v1.0/me/messages?$search="${query}"&$top=5&$select=id,from,subject,receivedDateTime`,
+          { headers: { Authorization: `Bearer ${user.microsoft_access_token}` } }
+        );
+        const messages = resp.data.value || [];
+        if (!messages.length) {
+          await client.chat.postMessage({ channel: command.channel_id, text: "✅ No matching emails found in Outlook." });
+          return;
+        }
+        let text = `🔎 *Outlook search* (“${query}”) — ${messages.length} found (showing up to 5)\n\n`;
+        for (let i = 0; i < messages.length; i++) {
+          const msg = messages[i];
+          const from = msg.from?.emailAddress?.address || "Unknown";
+          const subject = msg.subject || "No Subject";
+          text += `${i+1}. *From:* ${from}\n   *Subject:* ${subject}\n   → /open-email outlook ${i+1}\n\n`;
+        }
+        await client.chat.postMessage({ channel: command.channel_id, text });
+      }
+      await client.chat.postMessage({ channel: command.channel_id, text: "✅ Search completed." });
+    } catch (err) {
+      console.error("search-email error:", err.response?.data || err.message);
+      await client.chat.postMessage({ channel: command.channel_id, text: "❌ Error searching emails. Please try again later." });
+    }
+  });
+  
   app.command("/send-email", async ({ ack, command, body, client }) => {
     await ack();
 
@@ -468,6 +664,38 @@ function shortenLinks(text) {
   return text.replace(/https?:\/\/\S+/gi, (url) => `<${url}|link>`);
 }
 
+async function uploadToSlackFile(client, channel, filename, mimeType, dataBuffer) {
+  await client.files.uploadV2({
+    channel_id: channel,
+    filename: filename || "attachment",
+    title: filename || "attachment",
+    alt_text: filename || "attachment",
+    content_type: mimeType || "application/octet-stream",
+    file: dataBuffer,
+  });
+}
+
+async function fetchGmailAttachmentBody(gmail, messageId, attachmentId) {
+  const attResp = await gmail.users.messages.attachments.get({
+    userId: "me",
+    messageId,
+    id: attachmentId,
+  });
+  const data = attResp.data?.data || "";
+  return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+}
+
+async function fetchOutlookAttachmentBody(accessToken, messageId, attachmentId) {
+  const resp = await axios.get(
+    `https://graph.microsoft.com/v1.0/me/messages/${messageId}/attachments/${attachmentId}/$value`,
+    {
+      responseType: "arraybuffer",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+  return { data: Buffer.from(resp.data), contentType: resp.headers["content-type"] };
+}
+
 function extractGmailPlainText(payload) {
   if (!payload) return "";
   if (payload.mimeType === "text/plain" && payload.body?.data) {
@@ -585,7 +813,6 @@ function registerViews(app) {
     } catch (error) {
       console.error("Email send failed:", error.message);
       
-      // Send error message to user
       await client.chat.postMessage({
         channel: userId,
         text: `❌ Failed to send email: ${error.message}`,
