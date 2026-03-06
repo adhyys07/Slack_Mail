@@ -4,6 +4,10 @@ import { getUser } from "../db/store.js";
 import { getGoogleTokens } from "../providers/googleTokens.js";
 import { fetchGmail } from "../providers/gmail.js";
 import { sendEmail } from "../services/emailSender.js";
+import {
+  listGmailAttachments,
+  listOutlookAttachments,
+} from "../services/attachments.js";
 
 function registerCommands(app) {
   app.command("/connect-email", async ({ ack, command, respond }) => {
@@ -153,6 +157,15 @@ function registerCommands(app) {
             const subject = headers.find((h) => h.name === "Subject")?.value || "No Subject";
 
             emailText += `*From:* ${from}\n*Subject:* ${subject}\n\n`;
+
+            // Attachments (Gmail)
+            const attachments = await listGmailAttachments(userId, msg.id);
+            if (attachments.length) {
+              attachments.forEach((att) => {
+                const url = `${process.env.BASE_URL}/attachment/gmail/${msg.id}/${att.id}?user=${userId}`;
+                emailText += `📎 ${att.filename} (${Math.round(att.size / 1024)} KB)\n${url}\n\n`;
+              });
+            }
           }
 
           await respond(emailText);
@@ -170,7 +183,7 @@ function registerCommands(app) {
 
         try {
           const response = await axios.get(
-            "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$filter=isRead eq false&$top=5&$select=from,subject,receivedDateTime",
+            "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$filter=isRead eq false&$top=5&$select=id,from,subject,receivedDateTime",
             {
               headers: {
                 Authorization: `Bearer ${user.microsoft_access_token}`,
@@ -192,6 +205,14 @@ function registerCommands(app) {
             const subject = msg.subject || "No Subject";
 
             emailText += `*From:* ${from}\n*Subject:* ${subject}\n\n`;
+
+            const attachments = await listOutlookAttachments(userId, msg.id);
+            if (attachments.length) {
+              attachments.forEach((att) => {
+                const url = `${process.env.BASE_URL}/attachment/outlook/${msg.id}/${att.id}?user=${userId}`;
+                emailText += `📎 ${att.filename} (${Math.round(att.size / 1024)} KB)\n${url}\n\n`;
+              });
+            }
           }
 
           await respond(emailText);

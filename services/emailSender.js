@@ -6,7 +6,7 @@ const MAX_ATTACHMENTS = 3;
 const MAX_BYTES_PER_FILE = 5 * 1024 * 1024; // 5MB
 
 // Refresh Microsoft access token if expired (1 min buffer)
-async function ensureMicrosoftAccessToken(userId) {
+export async function ensureMicrosoftAccessToken(userId) {
   const user = await getUser(userId);
   if (!user || !user.microsoft_refresh_token) {
     throw new Error("Microsoft not connected. Please /connect-email again.");
