@@ -1,6 +1,7 @@
 import axios from "axios";
 import { google } from "googleapis";
 import { getUser, saveUser } from "../db/store.js";
+import { sendCustomEmail } from "./customMail.js";
 
 const MAX_ATTACHMENTS = 3;
 const MAX_BYTES_PER_FILE = 5 * 1024 * 1024; 
@@ -258,6 +259,11 @@ export async function sendEmail(
     return await sendEmailViaGoogle(userId, recipientEmail, subject, body, attachmentUrls);
   } else if (provider === "microsoft") {
     return await sendEmailViaOutlook(userId, recipientEmail, subject, body, attachmentUrls);
+  } else if (provider === "custom" || provider === "imap") {
+    if (attachmentUrls.length) {
+      throw new Error("Custom SMTP sending does not support URL attachments yet.");
+    }
+    return await sendCustomEmail(userId, recipientEmail, subject, body);
   } else {
     throw new Error(`Unknown email provider: ${provider}`);
   }

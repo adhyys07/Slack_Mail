@@ -4,6 +4,26 @@ import { getUser, saveUser } from "../db/store.js";
 import { getGoogleTokens } from "../providers/googleTokens.js";
 import { sendEmail, ensureMicrosoftAccessToken } from "../services/emailSender.js";
 import { listGmailAttachments, listOutlookAttachments } from "../services/attachments.js";
+import {
+  listCustomEmails,
+  normalizeCustomMailConfig,
+  openCustomEmail,
+  searchCustomEmails,
+  testCustomInboxConnection,
+} from "../services/customMail.js";
+import { getCustomMailPreset } from "../utils/customMailPresets.js";
+
+const GOOGLE_PROVIDERS = ["google", "gmail"];
+const MICROSOFT_PROVIDERS = ["microsoft", "outlook"];
+const CUSTOM_PROVIDERS = ["custom", "imap"];
+const ALL_PROVIDERS = [...GOOGLE_PROVIDERS, ...MICROSOFT_PROVIDERS, ...CUSTOM_PROVIDERS];
+
+function normalizeProvider(provider) {
+  if (GOOGLE_PROVIDERS.includes(provider)) return "google";
+  if (MICROSOFT_PROVIDERS.includes(provider)) return "microsoft";
+  if (CUSTOM_PROVIDERS.includes(provider)) return "custom";
+  return "";
+}
 
 function registerCommands(app) {
   app.command("/connect-email", async ({ ack, command, respond }) => {
@@ -36,9 +56,71 @@ function registerCommands(app) {
               text: { type: "plain_text", text: "Connect Microsoft" },
               url: microsoftAuthUrl,
             },
+            {
+              type: "button",
+              text: { type: "plain_text", text: "Custom Domain" },
+              action_id: "connect_custom_email",
+            },
           ],
         },
       ],
+    });
+  });
+
+  app.action("connect_custom_email", async ({ ack, body, client }) => {
+    await ack();
+
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: {
+        type: "modal",
+        callback_id: "custom_email_simple_modal",
+        title: { type: "plain_text", text: "Custom Email" },
+        submit: { type: "plain_text", text: "Continue" },
+        blocks: [
+          {
+            type: "input",
+            block_id: "email_block",
+            label: { type: "plain_text", text: "Email address" },
+            element: {
+              type: "plain_text_input",
+              action_id: "email_input",
+              placeholder: { type: "plain_text", text: "you@yourdomain.com" },
+            },
+          },
+          {
+            type: "input",
+            block_id: "provider_block",
+            label: { type: "plain_text", text: "Email host" },
+            element: {
+              type: "static_select",
+              action_id: "provider_select",
+              options: [
+                {
+                  text: { type: "plain_text", text: "Zoho Mail" },
+                  value: "zoho",
+                },
+                {
+                  text: { type: "plain_text", text: "Google Workspace" },
+                  value: "google_workspace",
+                },
+                {
+                  text: { type: "plain_text", text: "Microsoft 365" },
+                  value: "microsoft_365",
+                },
+                {
+                  text: { type: "plain_text", text: "Namecheap Private Email" },
+                  value: "namecheap",
+                },
+                {
+                  text: { type: "plain_text", text: "cPanel / Webmail" },
+                  value: "cpanel",
+                },
+              ],
+            },
+          },
+        ],
+      },
     });
   });
 
@@ -67,6 +149,10 @@ function registerCommands(app) {
         }
       }
 
+      const customStatus = userMail?.custom_mail
+        ? `Connected (${userMail.custom_mail.email})`
+        : "Not connected";
+
       await respond({
         response_type: "in_channel",
         text: "Email Account Status",
@@ -75,7 +161,7 @@ function registerCommands(app) {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: `📧 *Email Account Status*\n\n*Gmail:* ${googleStatus}\n*Microsoft/Outlook:* ${microsoftStatus}`,
+              text: `📧 *Email Account Status*\n\n*Gmail:* ${googleStatus}\n*Microsoft/Outlook:* ${microsoftStatus}\n*Custom Domain:* ${customStatus}`,
             },
           },
         ],
@@ -114,13 +200,15 @@ function registerCommands(app) {
     const provider = (providerRaw || "").toLowerCase();
     const idx = Math.min(5, Math.max(1, Number(indexRaw) || 1));
 
-    if (!["google", "gmail", "microsoft", "outlook"].includes(provider)) {
+    const normalizedProvider = normalizeProvider(provider);
+
+    if (!normalizedProvider) {
       await client.chat.postMessage({ channel: command.channel_id, text: "❌ Use: `/open-email gmail 1` or `/open-email outlook 2` (1–5)" });
       return;
     }
 
     try {
-      if (provider.startsWith("g")) {
+      if (normalizedProvider === "google") {
         const oauth2Client = await ensureGoogleAuth(command.user_id);
         const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
@@ -152,7 +240,7 @@ function registerCommands(app) {
         const text = shortenLinks(textRaw);
 
         await client.chat.postMessage({ channel: command.channel_id, text: `*From:* ${from}\n*Subject:* ${subject}\n*Date:* ${date}\n\n${text.slice(0, 4000)}` });
-      } else {
+      } else if (normalizedProvider === "microsoft") {
         const msAccessToken = await ensureMicrosoftAccessToken(command.user_id);
 
         const list = await axios.get(
@@ -186,6 +274,17 @@ function registerCommands(app) {
         const text = shortenLinks(textRaw || "(No body available)");
 
         await client.chat.postMessage({ channel: command.channel_id, text: `*From:* ${from}\n*Subject:* ${subject}\n*Date:* ${date}\n\n${text.slice(0, 4000)}` });
+      } else {
+        const message = await openCustomEmail(command.user_id, idx);
+        if (!message) {
+          await client.chat.postMessage({ channel: command.channel_id, text: `No email found at index ${idx} in your custom inbox.` });
+          return;
+        }
+        const text = shortenLinks(message.text || stripHtml(message.html) || "(No body available)");
+        await client.chat.postMessage({
+          channel: command.channel_id,
+          text: `*From:* ${message.from}\n*Subject:* ${message.subject}\n*Date:* ${message.date || ""}\n\n${text.slice(0, 4000)}`,
+        });
       }
     } catch (err) {
       console.error("open-email error:", err.message);
@@ -199,13 +298,15 @@ function registerCommands(app) {
     const idx = Math.min(5, Math.max(1, Number(idxRaw) || 1));
     const bodyText = rest.join(" ").trim();
 
-    if (!["google", "gmail", "microsoft", "outlook"].includes(provider) || !bodyText ) {
+    const normalizedProvider = normalizeProvider(provider);
+
+    if (!normalizedProvider || !bodyText ) {
       await client.chat.postMessage({ channel: command.channel_id, text: "❌ Use: `/reply-email gmail 1 Your reply here`" });
       return;
     }
 
     try {
-      if (provider.startsWith("g")) {
+      if (normalizedProvider === "google") {
         const oauth2Client = await ensureGoogleAuth(command.user_id);
         const gmail = google.gmail({ version: "v1", auth: oauth2Client });
         const list = await gmail.users.messages.list({
@@ -246,7 +347,7 @@ function registerCommands(app) {
         requestBody: { raw, threadId: full.data.threadId }
     });
       await client.chat.postMessage({ channel: command.channel_id, text: "✅ Reply sent via Gmail!" });
-      } else {
+      } else if (normalizedProvider === "microsoft") {
         const msAccessToken = await ensureMicrosoftAccessToken(command.user_id);
 
         const list = await axios.get(
@@ -267,6 +368,16 @@ function registerCommands(app) {
         );
         await client.chat.postMessage({ channel: command.channel_id, text: "✅ Reply sent via Outlook!" });
       }
+      if (normalizedProvider === "custom") {
+        const message = await openCustomEmail(command.user_id, idx);
+        const recipient = message?.replyTo || message?.fromEmail;
+        if (!message || !recipient) {
+          await client.chat.postMessage({ channel: command.channel_id, text: `No reply target found at index ${idx} in your custom inbox.` });
+          return;
+        }
+        await sendEmail(command.user_id, "custom", recipient, `Re: ${message.subject}`, bodyText);
+        await client.chat.postMessage({ channel: command.channel_id, text: "Reply sent via custom SMTP!" });
+      }
     } catch (err) {
       console.error("reply-email error:", err.message);
       await client.chat.postMessage({ channel: command.channel_id, text: "❌ Error sending reply. Please try again." });
@@ -284,12 +395,12 @@ function registerCommands(app) {
       const uploadFlag = parts.includes("upload");
       const cursor = parts.find((p, idx) => idx > 1 && p !== "upload") || "";
 
-      if (!provider || !["google", "gmail", "microsoft", "outlook"].includes(provider)) {
+      if (!provider || !ALL_PROVIDERS.includes(provider)) {
         await client.chat.postMessage({ channel: command.channel_id, text: "❌ Please specify a provider: `/get-emails google` or `/get-emails microsoft`" });
         return;
       }
 
-      const normalizedProvider = (provider === "google" || provider === "gmail") ? "google" : "microsoft";
+      const normalizedProvider = normalizeProvider(provider);
 
       if (normalizedProvider === "google") {
         try {
@@ -357,7 +468,7 @@ function registerCommands(app) {
           console.error("Gmail fetch error:", err);
           await client.chat.postMessage({ channel: command.channel_id, text: "❌ Gmail not connected or error fetching emails. Use `/connect-email` first." });
         }
-      } else {
+      } else if (normalizedProvider === "microsoft") {
         try {
           const msAccessToken = await ensureMicrosoftAccessToken(userId);
           const response = await axios.get(
@@ -417,6 +528,23 @@ function registerCommands(app) {
           console.error("Outlook fetch error:", err);
           await client.chat.postMessage({ channel: command.channel_id, text: "❌ Error fetching Outlook emails. Token may be expired." });
         }
+      } else {
+        try {
+          const messages = await listCustomEmails(userId, pageSize);
+          if (!messages.length) {
+            await client.chat.postMessage({ channel: command.channel_id, text: "No emails found in your custom inbox." });
+            return;
+          }
+
+          let emailText = `*Custom inbox (last ${messages.length})*\n\n`;
+          messages.forEach((msg, index) => {
+            emailText += `${index + 1}. *From:* ${msg.from}\n*Subject:* ${msg.subject}\n\n`;
+          });
+          await client.chat.postMessage({ channel: command.channel_id, text: emailText });
+        } catch (err) {
+          console.error("Custom inbox fetch error:", err);
+          await client.chat.postMessage({ channel: command.channel_id, text: "Error fetching custom inbox. Check your IMAP settings with /connect-email." });
+        }
       }
     } catch (err) {
       console.error("get-emails error:", err);
@@ -429,13 +557,15 @@ function registerCommands(app) {
     const [providerRaw, ...queryParts] = (command.text || "").trim().split(/\s+/);
     const provider = (providerRaw || "").toLowerCase();
     const query = queryParts.join(" ").trim();
-    if (!["google", "gmail", "microsoft", "outlook"].includes(provider) || !query) {
+    const normalizedProvider = normalizeProvider(provider);
+
+    if (!normalizedProvider || !query) {
       await client.chat.postMessage({ channel: command.channel_id, text: "❌ Use: `/search-email google your search query`" });
       return;
     }
 
     try{
-      if (provider.startsWith("g")) {
+      if (normalizedProvider === "google") {
         const oauth2Client = await ensureGoogleAuth(command.user_id);
         const gmail = google.gmail({ version: "v1", auth: oauth2Client });
         const response = await gmail.users.messages.list({
@@ -463,7 +593,7 @@ function registerCommands(app) {
           text += `${i+1}. *From:* ${from}\n   *Subject:* ${subject}\n   → /open-email gmail ${i+1}\n\n`;
         }
         await client.chat.postMessage({ channel: command.channel_id, text });
-      } else {
+      } else if (normalizedProvider === "microsoft") {
         const msAccessToken = await ensureMicrosoftAccessToken(command.user_id);
         const resp = await axios.get(
           `https://graph.microsoft.com/v1.0/me/messages?$search="${query}"&$top=5&$select=id,from,subject,receivedDateTime`,
@@ -481,6 +611,17 @@ function registerCommands(app) {
           const subject = msg.subject || "No Subject";
           text += `${i+1}. *From:* ${from}\n   *Subject:* ${subject}\n   → /open-email outlook ${i+1}\n\n`;
         }
+        await client.chat.postMessage({ channel: command.channel_id, text });
+      } else {
+        const messages = await searchCustomEmails(command.user_id, query, 5);
+        if (!messages.length) {
+          await client.chat.postMessage({ channel: command.channel_id, text: "No matching emails found in your custom inbox." });
+          return;
+        }
+        let text = `*Custom inbox search* ("${query}") - ${messages.length} found\n\n`;
+        messages.forEach((msg, index) => {
+          text += `${index + 1}. *From:* ${msg.from}\n   *Subject:* ${msg.subject}\n   -> /open-email custom ${index + 1}\n\n`;
+        });
         await client.chat.postMessage({ channel: command.channel_id, text });
       }
       await client.chat.postMessage({ channel: command.channel_id, text: "✅ Search completed." });
@@ -535,6 +676,10 @@ function registerCommands(app) {
                 {
                   text: { type: "plain_text", text: "Outlook" },
                   value: "microsoft",
+                },
+                {
+                  text: { type: "plain_text", text: "Custom Domain" },
+                  value: "custom",
                 },
               ],
             },
@@ -721,6 +866,110 @@ function registerViews(app) {
       console.log("🔍 View submission detected:", body.view?.callback_id);
     }
     await next();
+  });
+
+  app.view("custom_email_simple_modal", async ({ ack, body, view, client }) => {
+    const values = view.state.values;
+
+    try {
+      const email = values.email_block?.email_input?.value?.trim();
+      const provider = values.provider_block?.provider_select?.selected_option?.value;
+      const preset = getCustomMailPreset(provider, email);
+
+      if (!preset) {
+        await ack({
+          response_action: "errors",
+          errors: {
+            email_block: "Enter a valid email address and choose an email host.",
+          },
+        });
+        return;
+      }
+
+      await ack({
+        response_action: "push",
+        view: {
+          type: "modal",
+          callback_id: "custom_email_password_modal",
+          private_metadata: JSON.stringify(preset),
+          title: { type: "plain_text", text: "Email Password" },
+          submit: { type: "plain_text", text: "Connect" },
+          blocks: [
+            {
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text:
+                  `Connecting *${preset.email}* using *${preset.label}*.\n` +
+                  `IMAP: ${preset.imapHost}:${preset.imapPort}\n` +
+                  `SMTP: ${preset.smtpHost}:${preset.smtpPort}`,
+              },
+            },
+            {
+              type: "input",
+              block_id: "password_block",
+              label: { type: "plain_text", text: "Password or app password" },
+              element: {
+                type: "plain_text_input",
+                action_id: "password_input",
+              },
+            },
+          ],
+        },
+      });
+    } catch (err) {
+      console.error("custom_email_simple_modal error:", err.message);
+      await ack({
+        response_action: "errors",
+        errors: {
+          email_block: "Could not continue custom email setup.",
+        },
+      });
+    }
+  });
+
+  app.view("custom_email_password_modal", async ({ ack, body, view, client }) => {
+    const userId = body.user.id;
+    let acknowledged = false;
+
+    try {
+      const preset = JSON.parse(view.private_metadata || "{}");
+      const password = view.state.values.password_block?.password_input?.value;
+      const config = normalizeCustomMailConfig({
+        ...preset,
+        password,
+      });
+
+      await ack();
+      acknowledged = true;
+
+      const verifiedConfig = await testCustomInboxConnection(config);
+      const existing = await getUser(userId);
+      await saveUser(userId, {
+        ...existing,
+        custom_mail: verifiedConfig,
+      });
+
+      await client.chat.postMessage({
+        channel: userId,
+        text: `Custom email connected for ${verifiedConfig.email}. Use /get-emails custom to read it.`,
+      });
+    } catch (err) {
+      if (!acknowledged) {
+        await ack({
+          response_action: "errors",
+          errors: {
+            password_block: err.message || "Could not connect using this password.",
+          },
+        });
+        return;
+      }
+
+      await client.chat.postMessage({
+        channel: userId,
+        text: `Custom email connection failed: ${err.message}`,
+      });
+    }
   });
 
   app.view("send_email_modal", async ({ ack, body, view, client }) => {

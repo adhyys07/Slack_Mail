@@ -7,27 +7,33 @@
 3) Click your provider, for now its only Google & Microsoft.Once you authorize the access you will be able to use the full potential of the bot
 
 <u>**Commands**</u>
-* **/connect-email**: Connect Gmail or Outlook.
+* **/connect-email**: Connect Gmail, Outlook, or a custom-domain IMAP/SMTP inbox.
 * **/check-accounts**: Show connection status.
 * **/get-emails**: List inbox emails.
-	- Usage: `/get-emails gmail [pageSize] [nextToken] [upload]` or `/get-emails outlook [pageSize] [skiptoken] [upload]`
+	- Usage: `/get-emails gmail [pageSize] [nextToken] [upload]`, `/get-emails outlook [pageSize] [skiptoken] [upload]`, or `/get-emails custom [pageSize]`
 	- Defaults to 5; max 50. Include `upload` to also upload attachments to Slack.
 * **/open-email**: View full content of a specific email.
-	- Usage: `/open-email gmail 1` or `/open-email outlook 2` (indexes from the latest fetch)
+	- Usage: `/open-email gmail 1`, `/open-email outlook 2`, or `/open-email custom 1` (indexes from the latest fetch)
 * **/reply-email**: Reply to a listed email.
 	- Usage: `/reply-email gmail 1 Thanks for the update` (indexes 1–5 from latest fetch)
 * **/search-email**: Search inbox and get quick open links.
-	- Usage: `/search-email gmail invoice` or `/search-email outlook project`
+	- Usage: `/search-email gmail invoice`, `/search-email outlook project`, or `/search-email custom invoice`
 * **/send-email**: Opens modal to send email (supports attachments, schedule).
 * **/clear-bot**: Clears bot messages in the channel.
 
 
 ## Features !
-1) You can connect Google or Microsoft Account.
+1) You can connect Google, Microsoft, or a custom-domain IMAP/SMTP account.
 2) You can access the last 5 emails from your primary inbox.
 3) Attachments are supported in emails, so if there are any you can access it.
 4) You can send emails from slack itself with attachments !
 5) You can switch between inboxes efficiently.
+
+**Custom domain inboxes**
+- Use `/connect-email` and choose **Custom Domain**.
+- Enter your email address and choose your email host.
+- Enter the password/app password in the next modal.
+- Supported presets: Zoho Mail, Google Workspace, Microsoft 365, Namecheap Private Email, and cPanel/Webmail.
 
 
 ## For Developers!
@@ -44,7 +50,7 @@ npm install
 - Google APIs (Gmail send/read/attachments)
 - Microsoft Graph (Outlook send/read/attachments)
 - Redis (token store)
-- Axios (HTTP), IMAP client
+- Axios (HTTP), IMAP client, Nodemailer (custom SMTP)
 - Heroku (For Bot Hosting)
 
 **Environment Variables**
