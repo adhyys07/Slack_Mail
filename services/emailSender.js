@@ -6,6 +6,20 @@ import { sendCustomEmail } from "./customMail.js";
 const MAX_ATTACHMENTS = 3;
 const MAX_BYTES_PER_FILE = 5 * 1024 * 1024; 
 
+function normalizeEmailList(value = []) {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  return String(value)
+    .split(/[,\s;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function emailHeadersFor(recipients = {}) {
+  const cc = normalizeEmailList(recipients.cc);
+  const bcc = normalizeEmailList(recipients.bcc);
+  return { cc, bcc };
+}
+
 export async function ensureMicrosoftAccessToken(userId) {
   const user = await getUser(userId);
   if (!user || !user.microsoft_refresh_token) {
@@ -68,7 +82,8 @@ export async function sendEmailViaGoogle(
   recipientEmail,
   subject,
   body,
-  attachmentUrls = []
+  attachmentUrls = [],
+  recipients = {}
 ) {
   console.log(`📧 Starting Google email send to ${recipientEmail}`);
   
@@ -88,12 +103,15 @@ export async function sendEmailViaGoogle(
   const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
   const attachments = await fetchAttachments(attachmentUrls);
+  const { cc, bcc } = emailHeadersFor(recipients);
 
   // If no attachments, keep simple text path
   if (!attachments.length) {
     const message = [
       "From: me",
       `To: ${recipientEmail}`,
+      ...(cc.length ? [`Cc: ${cc.join(", ")}`] : []),
+      ...(bcc.length ? [`Bcc: ${bcc.join(", ")}`] : []),
       `Subject: ${subject}`,
       "MIME-Version: 1.0",
       "Content-Type: text/plain; charset=UTF-8",
@@ -132,6 +150,8 @@ export async function sendEmailViaGoogle(
   const lines = [
     "From: me",
     `To: ${recipientEmail}`,
+    ...(cc.length ? [`Cc: ${cc.join(", ")}`] : []),
+    ...(bcc.length ? [`Bcc: ${bcc.join(", ")}`] : []),
     `Subject: ${subject}`,
     "MIME-Version: 1.0",
     `Content-Type: multipart/mixed; boundary=\"${boundary}\"`,
@@ -184,7 +204,8 @@ export async function sendEmailViaOutlook(
   recipientEmail,
   subject,
   body,
-  attachmentUrls = []
+  attachmentUrls = [],
+  recipients = {}
 ) {
   console.log(`📧 Starting Outlook email send to ${recipientEmail}`);
   
@@ -192,6 +213,7 @@ export async function sendEmailViaOutlook(
 
   try {
     const attachments = await fetchAttachments(attachmentUrls);
+    const { cc, bcc } = emailHeadersFor(recipients);
 
     const response = await axios.post(
       "https://graph.microsoft.com/v1.0/me/sendMail",
@@ -209,6 +231,12 @@ export async function sendEmailViaOutlook(
               },
             },
           ],
+          ccRecipients: cc.map((address) => ({
+            emailAddress: { address },
+          })),
+          bccRecipients: bcc.map((address) => ({
+            emailAddress: { address },
+          })),
           attachments: attachments.map((att) => ({
             "@odata.type": "#microsoft.graph.fileAttachment",
             name: att.filename,
@@ -251,19 +279,20 @@ export async function sendEmail(
   recipientEmail,
   subject,
   body,
-  attachmentUrls = []
+  attachmentUrls = [],
+  recipients = {}
 ) {
   console.log(`\n🚀 sendEmail called: provider=${provider}, recipient=${recipientEmail}`);
   
   if (provider === "google") {
-    return await sendEmailViaGoogle(userId, recipientEmail, subject, body, attachmentUrls);
+    return await sendEmailViaGoogle(userId, recipientEmail, subject, body, attachmentUrls, recipients);
   } else if (provider === "microsoft") {
-    return await sendEmailViaOutlook(userId, recipientEmail, subject, body, attachmentUrls);
+    return await sendEmailViaOutlook(userId, recipientEmail, subject, body, attachmentUrls, recipients);
   } else if (provider === "custom" || provider === "imap") {
     if (attachmentUrls.length) {
       throw new Error("Custom SMTP sending does not support URL attachments yet.");
     }
-    return await sendCustomEmail(userId, recipientEmail, subject, body);
+    return await sendCustomEmail(userId, recipientEmail, subject, body, recipients);
   } else {
     throw new Error(`Unknown email provider: ${provider}`);
   }

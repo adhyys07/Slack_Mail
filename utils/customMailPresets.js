@@ -1,9 +1,9 @@
 export const CUSTOM_MAIL_PRESETS = {
   zoho: {
     label: "Zoho Mail",
-    imapHost: "imap.zoho.com",
+    imapHost: "imap.zoho.in",
     imapPort: 993,
-    smtpHost: "smtp.zoho.com",
+    smtpHost: "smtp.zoho.in",
     smtpPort: 465,
   },
   google_workspace: {

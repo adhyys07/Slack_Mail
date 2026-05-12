@@ -6,6 +6,14 @@ import { getUser } from "../db/store.js";
 const DEFAULT_IMAP_PORT = 993;
 const DEFAULT_SMTP_PORT = 465;
 
+function normalizeEmailList(value = []) {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  return String(value)
+    .split(/[,\s;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function getAddress(value) {
   return value?.value?.[0]?.address || value?.text || "";
 }
@@ -174,8 +182,10 @@ export async function searchCustomEmails(userId, query, limit = 5) {
   return fetchParsedMessages(config, [["TEXT", query]], limit);
 }
 
-export async function sendCustomEmail(userId, recipientEmail, subject, body) {
+export async function sendCustomEmail(userId, recipientEmail, subject, body, recipients = {}) {
   const config = await getCustomMailConfig(userId);
+  const cc = normalizeEmailList(recipients.cc);
+  const bcc = normalizeEmailList(recipients.bcc);
   const transporter = nodemailer.createTransport({
     host: config.smtpHost,
     port: config.smtpPort || DEFAULT_SMTP_PORT,
@@ -189,6 +199,8 @@ export async function sendCustomEmail(userId, recipientEmail, subject, body) {
   const info = await transporter.sendMail({
     from: config.email,
     to: recipientEmail,
+    ...(cc.length ? { cc } : {}),
+    ...(bcc.length ? { bcc } : {}),
     subject,
     text: body,
   });

@@ -718,6 +718,40 @@ function registerCommands(app) {
           },
           {
             type: "input",
+            block_id: "cc_block",
+            optional: true,
+            label: {
+              type: "plain_text",
+              text: "CC",
+            },
+            element: {
+              type: "plain_text_input",
+              action_id: "cc_input",
+              placeholder: {
+                type: "plain_text",
+                text: "cc@example.com, teammate@example.com",
+              },
+            },
+          },
+          {
+            type: "input",
+            block_id: "bcc_block",
+            optional: true,
+            label: {
+              type: "plain_text",
+              text: "BCC",
+            },
+            element: {
+              type: "plain_text_input",
+              action_id: "bcc_input",
+              placeholder: {
+                type: "plain_text",
+                text: "hidden@example.com",
+              },
+            },
+          },
+          {
+            type: "input",
             block_id: "body_block",
             label: {
               type: "plain_text",
@@ -785,6 +819,13 @@ function stripHtml(html) {
 function shortenLinks(text) {
   if (!text) return "";
   return text.replace(/https?:\/\/\S+/gi, (url) => `<${url}|link>`);
+}
+
+function parseEmailList(value = "") {
+  return String(value)
+    .split(/[,\s;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 async function ensureGoogleAuth(userId) {
@@ -986,6 +1027,8 @@ function registerViews(app) {
       const provider = values.provider_block?.provider_select?.selected_option?.value;
       const recipientEmail = values.recipient_block?.recipient_input?.value;
       const subject = values.subject_block?.subject_input?.value;
+      const cc = parseEmailList(values.cc_block?.cc_input?.value || "");
+      const bcc = parseEmailList(values.bcc_block?.bcc_input?.value || "");
       const emailBody = values.body_block?.body_input?.value;
       const attachmentsRaw = values.attachments_block?.attachments_input?.value || "";
       const attachmentUrls = attachmentsRaw
@@ -1035,11 +1078,14 @@ function registerViews(app) {
           recipientEmail,
           subject,
           emailBody,
-          attachmentUrls
+          attachmentUrls,
+          { cc, bcc }
         );
+        const ccLine = cc.length ? `\nCC: ${cc.join(", ")}` : "";
+        const bccLine = bcc.length ? `\nBCC: ${bcc.join(", ")}` : "";
         await client.chat.postMessage({
           channel: userId,
-          text: `✅ Email sent${delayMs ? " (scheduled)" : ""} via ${result.provider}!\n\nTo: ${recipientEmail}\nSubject: ${subject}`,
+          text: `✅ Email sent${delayMs ? " (scheduled)" : ""} via ${result.provider}!\n\nTo: ${recipientEmail}${ccLine}${bccLine}\nSubject: ${subject}`,
         });
       };
 
@@ -1049,9 +1095,11 @@ function registerViews(app) {
           void doSend();
         }, delayMs);
         scheduledJobs.add(timer);
+        const ccLine = cc.length ? `\nCC: ${cc.join(", ")}` : "";
+        const bccLine = bcc.length ? `\nBCC: ${bcc.join(", ")}` : "";
         await client.chat.postMessage({
           channel: userId,
-          text: `⏳ Email scheduled for ${new Date(Date.now() + delayMs).toISOString()}`,
+          text: `⏳ Email scheduled for ${new Date(Date.now() + delayMs).toISOString()}\n\nTo: ${recipientEmail}${ccLine}${bccLine}\nSubject: ${subject}`,
         });
       } else {
         await doSend();

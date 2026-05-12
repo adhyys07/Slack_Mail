@@ -18,7 +18,7 @@
 	- Usage: `/reply-email gmail 1 Thanks for the update` (indexes 1–5 from latest fetch)
 * **/search-email**: Search inbox and get quick open links.
 	- Usage: `/search-email gmail invoice`, `/search-email outlook project`, or `/search-email custom invoice`
-* **/send-email**: Opens modal to send email (supports attachments, schedule).
+* **/send-email**: Opens modal to send email (supports CC, BCC, attachments, and send later).
 * **/clear-bot**: Clears bot messages in the channel.
 
 
@@ -26,7 +26,7 @@
 1) You can connect Google, Microsoft, or a custom-domain IMAP/SMTP account.
 2) You can access the last 5 emails from your primary inbox.
 3) Attachments are supported in emails, so if there are any you can access it.
-4) You can send emails from slack itself with attachments !
+4) You can send emails from slack itself with CC, BCC, attachments, and scheduling !
 5) You can switch between inboxes efficiently.
 
 **Custom domain inboxes**
