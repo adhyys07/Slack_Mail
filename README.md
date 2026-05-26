@@ -20,15 +20,15 @@
 	- Usage: `/search-email gmail invoice`, `/search-email outlook project`, or `/search-email custom invoice`
 * **/send-email**: Opens modal to send email (supports send now, save as draft, send later, CC, BCC, and attachments).
 * **/star-email**: Star/flag an email.
-	- Usage: `/star-email gmail MESSAGE_ID`, `/star-email outlook MESSAGE_ID`, or `/star-email custom UID`
+	- Usage: `/star-email gmail 1`, `/star-email outlook 1`, or `/star-email custom 1`
 * **/unstar-email**: Remove star/flag from an email.
-	- Usage: `/unstar-email gmail MESSAGE_ID`, `/unstar-email outlook MESSAGE_ID`, or `/unstar-email custom UID`
+	- Usage: `/unstar-email gmail 1`, `/unstar-email outlook 1`, or `/unstar-email custom 1`
 * **/archive-email**: Archive an email.
-	- Usage: `/archive-email gmail MESSAGE_ID`, `/archive-email outlook MESSAGE_ID`, or `/archive-email custom UID`
+	- Usage: `/archive-email gmail 1`, `/archive-email outlook 1`, or `/archive-email custom 1`
 * **/delete-email**: Move an email to trash/deleted items.
-	- Usage: `/delete-email gmail MESSAGE_ID`, `/delete-email outlook MESSAGE_ID`, or `/delete-email custom UID`
+	- Usage: `/delete-email gmail 1`, `/delete-email outlook 1`, or `/delete-email custom 1`
 * **/move-email**: Move an email to a Gmail label, Outlook folder, or custom IMAP folder.
-	- Usage: `/move-email gmail MESSAGE_ID Label Name`, `/move-email outlook MESSAGE_ID Folder Name`, or `/move-email custom UID Folder Name`
+	- Usage: `/move-email gmail 1 Label Name`, `/move-email outlook 1 Folder Name`, or `/move-email custom 1 Folder Name`
 * **/starred-emails**: List starred/flagged emails.
 	- Usage: `/starred-emails gmail [limit]`, `/starred-emails outlook [limit]`, or `/starred-emails custom [limit]`
 * **/archived-emails**: List archived emails.

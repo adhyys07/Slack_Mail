@@ -237,17 +237,18 @@ function registerCommands(app) {
   app.command("/star-email", async ({ ack, command, client }) => {
     await ack();
 
-    const [provider, messageIdOrUid] = (command.text || "").trim().split(/\s+/);
+    const [provider, indexRaw] = (command.text || "").trim().split(/\s+/);
 
-    if (!provider || !messageIdOrUid) {
+    if (!provider || !indexRaw) {
       await client.chat.postMessage({
         channel: command.channel_id,
-        text: "Use: `/star-email gmail MESSAGE_ID`, `/star-email outlook MESSAGE_ID`, or `/star-email custom UID`",
+        text: "Use: `/star-email gmail 1`, `/star-email outlook 1`, or `/star-email custom 1`",
       });
       return;
     }
 
     try {
+      const messageIdOrUid = await resolveEmailActionId(command.user_id, provider, indexRaw);
       const result = await starEmail(command.user_id, provider, messageIdOrUid);
       await client.chat.postMessage({
         channel: command.channel_id,
@@ -265,17 +266,18 @@ function registerCommands(app) {
   app.command("/unstar-email", async ({ ack, command, client }) => {
     await ack();
 
-    const [provider, messageIdOrUid] = (command.text || "").trim().split(/\s+/);
+    const [provider, indexRaw] = (command.text || "").trim().split(/\s+/);
 
-    if (!provider || !messageIdOrUid) {
+    if (!provider || !indexRaw) {
       await client.chat.postMessage({
         channel: command.channel_id,
-        text: "Use: `/unstar-email gmail MESSAGE_ID`, `/unstar-email outlook MESSAGE_ID`, or `/unstar-email custom UID`",
+        text: "Use: `/unstar-email gmail 1`, `/unstar-email outlook 1`, or `/unstar-email custom 1`",
       });
       return;
     }
 
     try {
+      const messageIdOrUid = await resolveEmailActionId(command.user_id, provider, indexRaw);
       const result = await unstarEmail(command.user_id, provider, messageIdOrUid);
       await client.chat.postMessage({
         channel: command.channel_id,
@@ -293,16 +295,17 @@ function registerCommands(app) {
   app.command("/archive-email", async ({ ack, command, client }) => {
     await ack();
 
-    const [provider, messageIdOrUid] = (command.text || "").trim().split(/\s+/);
-    if (!provider || !messageIdOrUid) {
+    const [provider, indexRaw] = (command.text || "").trim().split(/\s+/);
+    if (!provider || !indexRaw) {
       await client.chat.postMessage({
         channel: command.channel_id,
-        text: "Use: `/archive-email gmail MESSAGE_ID`, `/archive-email outlook MESSAGE_ID`, or `/archive-email custom UID`",
+        text: "Use: `/archive-email gmail 1`, `/archive-email outlook 1`, or `/archive-email custom 1`",
       });
       return;
     }
 
     try {
+      const messageIdOrUid = await resolveEmailActionId(command.user_id, provider, indexRaw);
       const result = await archiveEmail(command.user_id, provider, messageIdOrUid);
       await client.chat.postMessage({
         channel: command.channel_id,
@@ -320,16 +323,17 @@ function registerCommands(app) {
   app.command("/delete-email", async ({ ack, command, client }) => {
     await ack();
 
-    const [provider, messageIdOrUid] = (command.text || "").trim().split(/\s+/);
-    if (!provider || !messageIdOrUid) {
+    const [provider, indexRaw] = (command.text || "").trim().split(/\s+/);
+    if (!provider || !indexRaw) {
       await client.chat.postMessage({
         channel: command.channel_id,
-        text: "Use: `/delete-email gmail MESSAGE_ID`, `/delete-email outlook MESSAGE_ID`, or `/delete-email custom UID`",
+        text: "Use: `/delete-email gmail 1`, `/delete-email outlook 1`, or `/delete-email custom 1`",
       });
       return;
     }
 
     try {
+      const messageIdOrUid = await resolveEmailActionId(command.user_id, provider, indexRaw);
       const result = await deleteEmail(command.user_id, provider, messageIdOrUid);
       await client.chat.postMessage({
         channel: command.channel_id,
@@ -347,17 +351,18 @@ function registerCommands(app) {
   app.command("/move-email", async ({ ack, command, client }) => {
     await ack();
 
-    const [provider, messageIdOrUid, ...destinationParts] = (command.text || "").trim().split(/\s+/);
+    const [provider, indexRaw, ...destinationParts] = (command.text || "").trim().split(/\s+/);
     const destination = destinationParts.join(" ").trim();
-    if (!provider || !messageIdOrUid || !destination) {
+    if (!provider || !indexRaw || !destination) {
       await client.chat.postMessage({
         channel: command.channel_id,
-        text: "Use: `/move-email gmail MESSAGE_ID Label Name`, `/move-email outlook MESSAGE_ID Folder Name`, or `/move-email custom UID Folder Name`",
+        text: "Use: `/move-email gmail 1 Label Name`, `/move-email outlook 1 Folder Name`, or `/move-email custom 1 Folder Name`",
       });
       return;
     }
 
     try {
+      const messageIdOrUid = await resolveEmailActionId(command.user_id, provider, indexRaw);
       const result = await moveEmail(command.user_id, provider, messageIdOrUid, destination);
       await client.chat.postMessage({
         channel: command.channel_id,
@@ -1232,6 +1237,44 @@ async function ensureGoogleAuth(userId) {
     console.error("Google token refresh failed:", err.message);
   }
   return oauth2Client;
+}
+
+async function resolveEmailActionId(userId, provider, index) {
+  const normalizedProvider = normalizeProvider(provider);
+  const idx = Math.min(5, Math.max(1, Number(index) || 1));
+
+  if (normalizedProvider === "google") {
+    const oauth2Client = await ensureGoogleAuth(userId);
+    const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+    const list = await gmail.users.messages.list({
+      userId: "me",
+      q: "category:primary",
+      maxResults: 5,
+    });
+    const msg = (list.data.messages || [])[idx - 1];
+    if (!msg) throw new Error(`No Gmail email found at index ${idx}.`);
+    return msg.id;
+  }
+
+  if (normalizedProvider === "microsoft") {
+    const msAccessToken = await ensureMicrosoftAccessToken(userId);
+    const list = await axios.get(
+      "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$top=5&$select=id,from,subject,receivedDateTime&$orderby=receivedDateTime desc",
+      { headers: { Authorization: `Bearer ${msAccessToken}` } }
+    );
+    const msg = (list.data.value || [])[idx - 1];
+    if (!msg) throw new Error(`No Outlook email found at index ${idx}.`);
+    return msg.id;
+  }
+
+  if (normalizedProvider === "custom") {
+    const messages = await listCustomEmails(userId, 5);
+    const msg = messages[idx - 1];
+    if (!msg?.uid) throw new Error(`No custom email found at index ${idx}.`);
+    return msg.uid;
+  }
+
+  throw new Error("Unknown provider.");
 }
 
 async function uploadToSlackFile(client, channel, filename, mimeType, dataBuffer) {
