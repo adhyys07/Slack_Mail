@@ -2,8 +2,16 @@ import axios from "axios";
 import { google } from "googleapis";
 import { getUser, saveUser } from "../db/store.js";
 import { getGoogleTokens } from "../providers/googleTokens.js";
-import { sendEmail, ensureMicrosoftAccessToken } from "../services/emailSender.js";
-import { starEmail, unstarEmail } from "../services/emailActions.js";
+import { saveDraftEmail, sendEmail, ensureMicrosoftAccessToken } from "../services/emailSender.js";
+import {
+  archiveEmail,
+  deleteEmail,
+  listArchivedEmails,
+  listStarredEmails,
+  moveEmail,
+  starEmail,
+  unstarEmail,
+} from "../services/emailActions.js";
 import { listGmailAttachments, listOutlookAttachments } from "../services/attachments.js";
 import {
   listCustomEmails,
@@ -247,6 +255,146 @@ function registerCommands(app) {
       await client.chat.postMessage({
         channel: command.channel_id,
         text: `Failed to unstar email: ${err.response?.data?.error?.message || err.message}`,
+      });
+    }
+  });
+
+  app.command("/archive-email", async ({ ack, command, client }) => {
+    await ack();
+
+    const [provider, messageIdOrUid] = (command.text || "").trim().split(/\s+/);
+    if (!provider || !messageIdOrUid) {
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: "Use: `/archive-email gmail MESSAGE_ID`, `/archive-email outlook MESSAGE_ID`, or `/archive-email custom UID`",
+      });
+      return;
+    }
+
+    try {
+      const result = await archiveEmail(command.user_id, provider, messageIdOrUid);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Email archived via ${result.provider}.`,
+      });
+    } catch (err) {
+      console.error("archive-email error:", err.response?.data || err.message);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Failed to archive email: ${err.response?.data?.error?.message || err.message}`,
+      });
+    }
+  });
+
+  app.command("/delete-email", async ({ ack, command, client }) => {
+    await ack();
+
+    const [provider, messageIdOrUid] = (command.text || "").trim().split(/\s+/);
+    if (!provider || !messageIdOrUid) {
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: "Use: `/delete-email gmail MESSAGE_ID`, `/delete-email outlook MESSAGE_ID`, or `/delete-email custom UID`",
+      });
+      return;
+    }
+
+    try {
+      const result = await deleteEmail(command.user_id, provider, messageIdOrUid);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Email deleted via ${result.provider}.`,
+      });
+    } catch (err) {
+      console.error("delete-email error:", err.response?.data || err.message);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Failed to delete email: ${err.response?.data?.error?.message || err.message}`,
+      });
+    }
+  });
+
+  app.command("/move-email", async ({ ack, command, client }) => {
+    await ack();
+
+    const [provider, messageIdOrUid, ...destinationParts] = (command.text || "").trim().split(/\s+/);
+    const destination = destinationParts.join(" ").trim();
+    if (!provider || !messageIdOrUid || !destination) {
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: "Use: `/move-email gmail MESSAGE_ID Label Name`, `/move-email outlook MESSAGE_ID Folder Name`, or `/move-email custom UID Folder Name`",
+      });
+      return;
+    }
+
+    try {
+      const result = await moveEmail(command.user_id, provider, messageIdOrUid, destination);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Email moved via ${result.provider} to ${result.destination || result.folder || destination}.`,
+      });
+    } catch (err) {
+      console.error("move-email error:", err.response?.data || err.message);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Failed to move email: ${err.response?.data?.error?.message || err.message}`,
+      });
+    }
+  });
+
+  app.command("/starred-emails", async ({ ack, command, client }) => {
+    await ack();
+
+    const [providerRaw, limitRaw] = (command.text || "").trim().split(/\s+/);
+    const provider = (providerRaw || "").toLowerCase();
+    const limit = Math.min(20, Math.max(1, Number(limitRaw) || 5));
+    if (!normalizeProvider(provider)) {
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: "Use: `/starred-emails gmail [limit]`, `/starred-emails outlook [limit]`, or `/starred-emails custom [limit]`",
+      });
+      return;
+    }
+
+    try {
+      const result = await listStarredEmails(command.user_id, provider, limit);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: formatEmailSummaryList(`*${result.provider} starred emails*`, result.messages),
+      });
+    } catch (err) {
+      console.error("starred-emails error:", err.response?.data || err.message);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Failed to list starred emails: ${err.response?.data?.error?.message || err.message}`,
+      });
+    }
+  });
+
+  app.command("/archived-emails", async ({ ack, command, client }) => {
+    await ack();
+
+    const [providerRaw, limitRaw] = (command.text || "").trim().split(/\s+/);
+    const provider = (providerRaw || "").toLowerCase();
+    const limit = Math.min(20, Math.max(1, Number(limitRaw) || 5));
+    if (!normalizeProvider(provider)) {
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: "Use: `/archived-emails gmail [limit]`, `/archived-emails outlook [limit]`, or `/archived-emails custom [limit]`",
+      });
+      return;
+    }
+
+    try {
+      const result = await listArchivedEmails(command.user_id, provider, limit);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: formatEmailSummaryList(`*${result.provider} archived emails*`, result.messages),
+      });
+    } catch (err) {
+      console.error("archived-emails error:", err.response?.data || err.message);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Failed to list archived emails: ${err.response?.data?.error?.message || err.message}`,
       });
     }
   });
@@ -717,6 +865,36 @@ function registerCommands(app) {
         blocks: [
           {
             type: "input",
+            block_id: "action_block",
+            label: {
+              type: "plain_text",
+              text: "Action",
+            },
+            element: {
+              type: "static_select",
+              action_id: "action_select",
+              initial_option: {
+                text: { type: "plain_text", text: "Send now" },
+                value: "send_now",
+              },
+              options: [
+                {
+                  text: { type: "plain_text", text: "Send now" },
+                  value: "send_now",
+                },
+                {
+                  text: { type: "plain_text", text: "Send later" },
+                  value: "send_later",
+                },
+                {
+                  text: { type: "plain_text", text: "Save as draft" },
+                  value: "save_draft",
+                },
+              ],
+            },
+          },
+          {
+            type: "input",
             block_id: "provider_block",
             label: {
               type: "plain_text",
@@ -883,6 +1061,20 @@ function parseEmailList(value = "") {
     .split(/[,\s;]+/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function formatEmailSummaryList(title, messages = []) {
+  if (!messages.length) return `${title}\n\nNo emails found.`;
+
+  let text = `${title}\n\n`;
+  messages.forEach((msg, index) => {
+    const idLabel = msg.uid ? "UID" : "ID";
+    const id = msg.uid || msg.id || "unknown";
+    text += `${index + 1}. *${idLabel}:* ${id}\n*From:* ${msg.from}\n*Subject:* ${msg.subject}\n`;
+    if (msg.date) text += `*Date:* ${msg.date}\n`;
+    text += "\n";
+  });
+  return text;
 }
 
 async function ensureGoogleAuth(userId) {
@@ -1081,6 +1273,7 @@ function registerViews(app) {
 
     try {
       // Extract form values
+      const sendAction = values.action_block?.action_select?.selected_option?.value || "send_now";
       const provider = values.provider_block?.provider_select?.selected_option?.value;
       const recipientEmail = values.recipient_block?.recipient_input?.value;
       const subject = values.subject_block?.subject_input?.value;
@@ -1095,6 +1288,30 @@ function registerViews(app) {
       const sendLaterRaw = values.send_later_block?.send_later_input?.value?.trim() || "";
 
       let delayMs = 0;
+      if (sendAction === "send_later" && !sendLaterRaw) {
+        await client.chat.postMessage({
+          channel: userId,
+          text: "âŒ Please enter a send-later time when choosing Send later.",
+        });
+        return;
+      }
+
+      if (sendAction === "send_now" && sendLaterRaw) {
+        await client.chat.postMessage({
+          channel: userId,
+          text: "âŒ Choose Send later if you want to use the send-later time.",
+        });
+        return;
+      }
+
+      if (sendAction === "save_draft" && sendLaterRaw) {
+        await client.chat.postMessage({
+          channel: userId,
+          text: "âŒ Drafts ignore scheduling. Clear Send later or choose Send later.",
+        });
+        return;
+      }
+
       if (sendLaterRaw) {
         const ts = Date.parse(sendLaterRaw);
         if (Number.isNaN(ts)) {
@@ -1127,6 +1344,25 @@ function registerViews(app) {
         return;
       }
 
+      if (sendAction === "save_draft") {
+        const result = await saveDraftEmail(
+          userId,
+          provider,
+          recipientEmail,
+          subject,
+          emailBody,
+          attachmentUrls,
+          { cc, bcc }
+        );
+        const ccLine = cc.length ? `\nCC: ${cc.join(", ")}` : "";
+        const bccLine = bcc.length ? `\nBCC: ${bcc.join(", ")}` : "";
+        await client.chat.postMessage({
+          channel: userId,
+          text: `âœ… Draft saved via ${result.provider}.\n\nTo: ${recipientEmail}${ccLine}${bccLine}\nSubject: ${subject}`,
+        });
+        return;
+      }
+
       const doSend = async () => {
         console.log(`Attempting to send email via ${provider}...`);
         const result = await sendEmail(
@@ -1146,7 +1382,7 @@ function registerViews(app) {
         });
       };
 
-      if (delayMs > 0) {
+      if (sendAction === "send_later" && delayMs > 0) {
         const timer = setTimeout(() => {
           scheduledJobs.delete(timer);
           void doSend();

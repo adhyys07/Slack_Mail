@@ -1,7 +1,7 @@
 import axios from "axios";
 import { google } from "googleapis";
 import { getUser, saveUser } from "../db/store.js";
-import { sendCustomEmail } from "./customMail.js";
+import { saveCustomDraft, sendCustomEmail } from "./customMail.js";
 
 const MAX_ATTACHMENTS = 3;
 const MAX_BYTES_PER_FILE = 5 * 1024 * 1024; 
@@ -18,6 +18,68 @@ function emailHeadersFor(recipients = {}) {
   const cc = normalizeEmailList(recipients.cc);
   const bcc = normalizeEmailList(recipients.bcc);
   return { cc, bcc };
+}
+
+function encodeBase64Url(value) {
+  return Buffer.from(value)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function buildRawMessage(recipientEmail, subject, body, attachments = [], recipients = {}) {
+  const { cc, bcc } = emailHeadersFor(recipients);
+
+  if (!attachments.length) {
+    return [
+      "From: me",
+      `To: ${recipientEmail}`,
+      ...(cc.length ? [`Cc: ${cc.join(", ")}`] : []),
+      ...(bcc.length ? [`Bcc: ${bcc.join(", ")}`] : []),
+      `Subject: ${subject}`,
+      "MIME-Version: 1.0",
+      "Content-Type: text/plain; charset=UTF-8",
+      "",
+      body,
+    ].join("\n");
+  }
+
+  const boundary = "mixed_" + Date.now();
+  const lines = [
+    "From: me",
+    `To: ${recipientEmail}`,
+    ...(cc.length ? [`Cc: ${cc.join(", ")}`] : []),
+    ...(bcc.length ? [`Bcc: ${bcc.join(", ")}`] : []),
+    `Subject: ${subject}`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/mixed; boundary=\"${boundary}\"`,
+    "",
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    "",
+    body,
+  ];
+
+  attachments.forEach((att) => {
+    lines.push(
+      `--${boundary}`,
+      `Content-Type: ${att.mimeType}`,
+      `Content-Disposition: attachment; filename=\"${att.filename}\"`,
+      "Content-Transfer-Encoding: base64",
+      "",
+      att.base64
+    );
+  });
+
+  lines.push(`--${boundary}--`, "");
+  return lines.join("\n");
+}
+
+function graphRecipients(addresses = []) {
+  return normalizeEmailList(addresses).map((address) => ({
+    emailAddress: { address },
+  }));
 }
 
 export async function ensureMicrosoftAccessToken(userId) {
@@ -85,8 +147,8 @@ export async function sendEmailViaGoogle(
   attachmentUrls = [],
   recipients = {}
 ) {
-  console.log(`📧 Starting Google email send to ${recipientEmail}`);
-  
+  console.log(`?? Starting Google email send to ${recipientEmail}`);
+
   const user = await getUser(userId);
   if (!user || !user.google_tokens) {
     throw new Error("Google tokens not found. Please connect Gmail first.");
@@ -99,102 +161,26 @@ export async function sendEmailViaGoogle(
   );
 
   oauth2Client.setCredentials(user.google_tokens);
-  
   const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-
   const attachments = await fetchAttachments(attachmentUrls);
-  const { cc, bcc } = emailHeadersFor(recipients);
-
-  // If no attachments, keep simple text path
-  if (!attachments.length) {
-    const message = [
-      "From: me",
-      `To: ${recipientEmail}`,
-      ...(cc.length ? [`Cc: ${cc.join(", ")}`] : []),
-      ...(bcc.length ? [`Bcc: ${bcc.join(", ")}`] : []),
-      `Subject: ${subject}`,
-      "MIME-Version: 1.0",
-      "Content-Type: text/plain; charset=UTF-8",
-      "",
-      body,
-    ].join("\n");
-
-    const encodedMessage = Buffer.from(message)
-      .toString("base64")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
-
-    try {
-      const response = await gmail.users.messages.send({
-        userId: "me",
-        requestBody: {
-          raw: encodedMessage,
-        },
-      });
-
-      console.log(`✅ Gmail email sent successfully. Message ID: ${response.data.id}`);
-      return {
-        success: true,
-        messageId: response.data.id,
-        provider: "Gmail",
-      };
-    } catch (err) {
-      console.error(`❌ Gmail API error: ${err.message}`);
-      throw new Error(`Gmail error: ${err.message}`);
-    }
-  }
-
-  // Multipart with attachments
-  const boundary = "mixed_" + Date.now();
-  const lines = [
-    "From: me",
-    `To: ${recipientEmail}`,
-    ...(cc.length ? [`Cc: ${cc.join(", ")}`] : []),
-    ...(bcc.length ? [`Bcc: ${bcc.join(", ")}`] : []),
-    `Subject: ${subject}`,
-    "MIME-Version: 1.0",
-    `Content-Type: multipart/mixed; boundary=\"${boundary}\"`,
-    "",
-    `--${boundary}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    "",
-    body,
-  ];
-
-  attachments.forEach((att) => {
-    lines.push(
-      `--${boundary}`,
-      `Content-Type: ${att.mimeType}`,
-      `Content-Disposition: attachment; filename=\"${att.filename}\"`,
-      "Content-Transfer-Encoding: base64",
-      "",
-      att.base64
-    );
-  });
-
-  lines.push(`--${boundary}--`, "");
-
-  const encodedMessage = Buffer.from(lines.join("\n"))
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  const encodedMessage = encodeBase64Url(
+    buildRawMessage(recipientEmail, subject, body, attachments, recipients)
+  );
 
   try {
     const response = await gmail.users.messages.send({
       userId: "me",
       requestBody: { raw: encodedMessage },
     });
-    
-    console.log(`✅ Gmail email sent successfully. Message ID: ${response.data.id}`);
+
+    console.log(`? Gmail email sent successfully. Message ID: ${response.data.id}`);
     return {
       success: true,
       messageId: response.data.id,
       provider: "Gmail",
     };
   } catch (err) {
-    console.error(`❌ Gmail API error: ${err.message}`);
+    console.error(`? Gmail API error: ${err.message}`);
     throw new Error(`Gmail error: ${err.message}`);
   }
 }
@@ -270,6 +256,114 @@ export async function sendEmailViaOutlook(
     }
     
     throw new Error(`Outlook error: ${errorMsg}`);
+  }
+}
+
+export async function saveDraftViaGoogle(
+  userId,
+  recipientEmail,
+  subject,
+  body,
+  attachmentUrls = [],
+  recipients = {}
+) {
+  const user = await getUser(userId);
+  if (!user || !user.google_tokens) {
+    throw new Error("Google tokens not found. Please connect Gmail first.");
+  }
+
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+
+  oauth2Client.setCredentials(user.google_tokens);
+  const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+  const attachments = await fetchAttachments(attachmentUrls);
+  const raw = encodeBase64Url(
+    buildRawMessage(recipientEmail, subject, body, attachments, recipients)
+  );
+
+  const response = await gmail.users.drafts.create({
+    userId: "me",
+    requestBody: {
+      message: { raw },
+    },
+  });
+
+  return {
+    success: true,
+    draftId: response.data.id,
+    provider: "Gmail",
+  };
+}
+
+export async function saveDraftViaOutlook(
+  userId,
+  recipientEmail,
+  subject,
+  body,
+  attachmentUrls = [],
+  recipients = {}
+) {
+  const msToken = await ensureMicrosoftAccessToken(userId);
+  const attachments = await fetchAttachments(attachmentUrls);
+  const { cc, bcc } = emailHeadersFor(recipients);
+
+  const response = await axios.post(
+    "https://graph.microsoft.com/v1.0/me/messages",
+    {
+      subject,
+      body: {
+        contentType: "Text",
+        content: body,
+      },
+      toRecipients: graphRecipients(recipientEmail),
+      ccRecipients: graphRecipients(cc),
+      bccRecipients: graphRecipients(bcc),
+      attachments: attachments.map((att) => ({
+        "@odata.type": "#microsoft.graph.fileAttachment",
+        name: att.filename,
+        contentType: att.mimeType,
+        contentBytes: att.base64,
+      })),
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${msToken}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  return {
+    success: true,
+    draftId: response.data.id,
+    provider: "Outlook",
+  };
+}
+
+export async function saveDraftEmail(
+  userId,
+  provider,
+  recipientEmail,
+  subject,
+  body,
+  attachmentUrls = [],
+  recipients = {}
+) {
+  if (provider === "google") {
+    return await saveDraftViaGoogle(userId, recipientEmail, subject, body, attachmentUrls, recipients);
+  } else if (provider === "microsoft") {
+    return await saveDraftViaOutlook(userId, recipientEmail, subject, body, attachmentUrls, recipients);
+  } else if (provider === "custom" || provider === "imap") {
+    if (attachmentUrls.length) {
+      throw new Error("Custom IMAP drafts do not support URL attachments yet.");
+    }
+    return await saveCustomDraft(userId, recipientEmail, subject, body, recipients);
+  } else {
+    throw new Error(`Unknown email provider: ${provider}`);
   }
 }
 

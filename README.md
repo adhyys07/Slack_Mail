@@ -18,11 +18,21 @@
 	- Usage: `/reply-email gmail 1 Thanks for the update` (indexes 1–5 from latest fetch)
 * **/search-email**: Search inbox and get quick open links.
 	- Usage: `/search-email gmail invoice`, `/search-email outlook project`, or `/search-email custom invoice`
-* **/send-email**: Opens modal to send email (supports CC, BCC, attachments, and send later).
+* **/send-email**: Opens modal to send email (supports send now, save as draft, send later, CC, BCC, and attachments).
 * **/star-email**: Star/flag an email.
 	- Usage: `/star-email gmail MESSAGE_ID`, `/star-email outlook MESSAGE_ID`, or `/star-email custom UID`
 * **/unstar-email**: Remove star/flag from an email.
 	- Usage: `/unstar-email gmail MESSAGE_ID`, `/unstar-email outlook MESSAGE_ID`, or `/unstar-email custom UID`
+* **/archive-email**: Archive an email.
+	- Usage: `/archive-email gmail MESSAGE_ID`, `/archive-email outlook MESSAGE_ID`, or `/archive-email custom UID`
+* **/delete-email**: Move an email to trash/deleted items.
+	- Usage: `/delete-email gmail MESSAGE_ID`, `/delete-email outlook MESSAGE_ID`, or `/delete-email custom UID`
+* **/move-email**: Move an email to a Gmail label, Outlook folder, or custom IMAP folder.
+	- Usage: `/move-email gmail MESSAGE_ID Label Name`, `/move-email outlook MESSAGE_ID Folder Name`, or `/move-email custom UID Folder Name`
+* **/starred-emails**: List starred/flagged emails.
+	- Usage: `/starred-emails gmail [limit]`, `/starred-emails outlook [limit]`, or `/starred-emails custom [limit]`
+* **/archived-emails**: List archived emails.
+	- Usage: `/archived-emails gmail [limit]`, `/archived-emails outlook [limit]`, or `/archived-emails custom [limit]`
 * **/clear-bot**: Clears bot messages in the channel.
 
 
@@ -30,7 +40,7 @@
 1) You can connect Google, Microsoft, or a custom-domain IMAP/SMTP account.
 2) You can access the last 5 emails from your primary inbox.
 3) Attachments are supported in emails, so if there are any you can access it.
-4) You can send emails from slack itself with CC, BCC, attachments, and scheduling !
+4) You can send emails from slack itself with drafts, CC, BCC, attachments, and scheduling !
 5) You can switch between inboxes efficiently.
 
 **Custom domain inboxes**
@@ -80,7 +90,7 @@ PORT=3000
 	- Install to Workspace → copy `SLACK_BOT_TOKEN`.
 4) App Credentials: copy `SLACK_SIGNING_SECRET`.
 5) Slash Commands:
-	- /connect-email, /get-emails, /open-email, /reply-email, /send-email, /search-email, /star-email, /unstar-email, /clear-bot
+	- /connect-email, /get-emails, /open-email, /reply-email, /send-email, /search-email, /star-email, /unstar-email, /archive-email, /delete-email, /move-email, /starred-emails, /archived-emails, /clear-bot
 	- For each command set the Request URL to: `https://your-server.com/slack/events`
 6) Event Subscriptions:
 	- Enable events; Request URL: `https://your-server.com/slack/events`

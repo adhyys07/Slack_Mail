@@ -211,3 +211,80 @@ export async function sendCustomEmail(userId, recipientEmail, subject, body, rec
     provider: "Custom",
   };
 }
+
+function buildDraftMessage(from, recipientEmail, subject, body, recipients = {}) {
+  const cc = normalizeEmailList(recipients.cc);
+  const bcc = normalizeEmailList(recipients.bcc);
+
+  return [
+    `From: ${from}`,
+    `To: ${recipientEmail}`,
+    ...(cc.length ? [`Cc: ${cc.join(", ")}`] : []),
+    ...(bcc.length ? [`Bcc: ${bcc.join(", ")}`] : []),
+    `Subject: ${subject}`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=UTF-8",
+    "",
+    body,
+  ].join("\r\n");
+}
+
+function appendDraft(config, message) {
+  return new Promise((resolve, reject) => {
+    const imap = createImap(config);
+
+    const tryAppend = (folders, index = 0) => {
+      const folder = folders[index];
+      if (!folder) {
+        imap.end();
+        reject(new Error("Could not find or create a Drafts folder."));
+        return;
+      }
+
+      imap.append(message, { mailbox: folder, flags: ["\\Draft"] }, (err) => {
+        if (!err) {
+          imap.end();
+          resolve({ folder });
+          return;
+        }
+
+        if (index < folders.length - 1) {
+          tryAppend(folders, index + 1);
+          return;
+        }
+
+        imap.addBox("Drafts", (addErr) => {
+          if (addErr) {
+            imap.end();
+            reject(err);
+            return;
+          }
+
+          imap.append(message, { mailbox: "Drafts", flags: ["\\Draft"] }, (appendErr) => {
+            imap.end();
+            appendErr ? reject(appendErr) : resolve({ folder: "Drafts" });
+          });
+        });
+      });
+    };
+
+    imap.once("error", reject);
+    imap.once("ready", () => {
+      tryAppend(["Drafts", "INBOX.Drafts", "[Gmail]/Drafts"]);
+    });
+
+    imap.connect();
+  });
+}
+
+export async function saveCustomDraft(userId, recipientEmail, subject, body, recipients = {}) {
+  const config = await getCustomMailConfig(userId);
+  const message = buildDraftMessage(config.email, recipientEmail, subject, body, recipients);
+  const result = await appendDraft(config, message);
+
+  return {
+    success: true,
+    draftId: result.folder,
+    provider: "Custom",
+  };
+}
