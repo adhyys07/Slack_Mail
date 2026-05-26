@@ -6,7 +6,10 @@ import { saveDraftEmail, sendEmail, ensureMicrosoftAccessToken } from "../servic
 import {
   archiveEmail,
   deleteEmail,
+  disconnectEmailProvider,
+  getUnreadCount,
   listArchivedEmails,
+  listSentEmails,
   listStarredEmails,
   moveEmail,
   starEmail,
@@ -178,6 +181,34 @@ function registerCommands(app) {
     } catch (err) {
       console.error("check-accounts error:", err);
       await respond({ response_type: "in_channel", text: "❌ Error checking accounts. Please try again later." });
+    }
+  });
+
+  app.command("/disconnect-email", async ({ ack, command, client }) => {
+    await ack();
+
+    const provider = (command.text || "").trim().toLowerCase();
+    if (!normalizeProvider(provider)) {
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: "Use: `/disconnect-email gmail`, `/disconnect-email outlook`, or `/disconnect-email custom`",
+      });
+      return;
+    }
+
+    try {
+      const updated = await disconnectEmailProvider(command.user_id, provider);
+      await saveUser(command.user_id, updated);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `${provider} disconnected.`,
+      });
+    } catch (err) {
+      console.error("disconnect-email error:", err.message);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Failed to disconnect email: ${err.message}`,
+      });
     }
   });
 
@@ -399,6 +430,62 @@ function registerCommands(app) {
     }
   });
 
+  app.command("/sent-emails", async ({ ack, command, client }) => {
+    await ack();
+
+    const [providerRaw, limitRaw] = (command.text || "").trim().split(/\s+/);
+    const provider = (providerRaw || "").toLowerCase();
+    const limit = Math.min(20, Math.max(1, Number(limitRaw) || 5));
+    if (!normalizeProvider(provider)) {
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: "Use: `/sent-emails gmail [limit]`, `/sent-emails outlook [limit]`, or `/sent-emails custom [limit]`",
+      });
+      return;
+    }
+
+    try {
+      const result = await listSentEmails(command.user_id, provider, limit);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: formatEmailSummaryList(`*${result.provider} sent emails*`, result.messages),
+      });
+    } catch (err) {
+      console.error("sent-emails error:", err.response?.data || err.message);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Failed to list sent emails: ${err.response?.data?.error?.message || err.message}`,
+      });
+    }
+  });
+
+  app.command("/unread-count", async ({ ack, command, client }) => {
+    await ack();
+
+    const provider = (command.text || "").trim().toLowerCase();
+    if (!normalizeProvider(provider)) {
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: "Use: `/unread-count gmail`, `/unread-count outlook`, or `/unread-count custom`",
+      });
+      return;
+    }
+
+    try {
+      const result = await getUnreadCount(command.user_id, provider);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `*${result.provider} unread count:* ${result.count}`,
+      });
+    } catch (err) {
+      console.error("unread-count error:", err.response?.data || err.message);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Failed to get unread count: ${err.response?.data?.error?.message || err.message}`,
+      });
+    }
+  });
+
   app.command("/open-email", async ({ ack, command, respond, client }) => {
     await ack();
     const [providerRaw, indexRaw] = (command.text || "").trim().split(/\s+/);
@@ -501,7 +588,7 @@ function registerCommands(app) {
     const [providerRaw, idxRaw, ...rest] = (command.text || "").trim().split(/\s+/);
     const provider = (providerRaw || "").toLowerCase();
     const idx = Math.min(5, Math.max(1, Number(idxRaw) || 1));
-    const bodyText = rest.join(" ").trim();
+    const { bodyText, cc, bcc } = parseReplyText(rest);
 
     const normalizedProvider = normalizeProvider(provider);
 
@@ -538,6 +625,8 @@ function registerCommands(app) {
 
         const rawLines = [
           `To: ${headers.find((h) => h.name === "Reply-To")?.value || headers.find((h) => h.name === "From")?.value || ""}`,
+          ...(cc.length ? [`Cc: ${cc.join(", ")}`] : []),
+          ...(bcc.length ? [`Bcc: ${bcc.join(", ")}`] : []),
           `Subject: Re: ${subject}`,
           `In-Reply-To: ${inReplyTo || ""}`,
           `References: ${refs}`,
@@ -566,9 +655,28 @@ function registerCommands(app) {
           return;
         }
 
+        const draft = await axios.post(
+          `https://graph.microsoft.com/v1.0/me/messages/${msgMeta.id}/createReply`,
+          {},
+          { headers: { Authorization: `Bearer ${msAccessToken}` } }
+        );
+
+        await axios.patch(
+          `https://graph.microsoft.com/v1.0/me/messages/${draft.data.id}`,
+          {
+            body: {
+              contentType: "Text",
+              content: bodyText,
+            },
+            ...(cc.length ? { ccRecipients: graphRecipients(cc) } : {}),
+            ...(bcc.length ? { bccRecipients: graphRecipients(bcc) } : {}),
+          },
+          { headers: { Authorization: `Bearer ${msAccessToken}`, "Content-Type": "application/json" } }
+        );
+
         await axios.post(
-          `https://graph.microsoft.com/v1.0/me/messages/${msgMeta.id}/reply`,
-          { comment: bodyText },
+          `https://graph.microsoft.com/v1.0/me/messages/${draft.data.id}/send`,
+          {},
           { headers: { Authorization: `Bearer ${msAccessToken}` } }
         );
         await client.chat.postMessage({ channel: command.channel_id, text: "✅ Reply sent via Outlook!" });
@@ -580,7 +688,7 @@ function registerCommands(app) {
           await client.chat.postMessage({ channel: command.channel_id, text: `No reply target found at index ${idx} in your custom inbox.` });
           return;
         }
-        await sendEmail(command.user_id, "custom", recipient, `Re: ${message.subject}`, bodyText);
+        await sendEmail(command.user_id, "custom", recipient, `Re: ${message.subject}`, bodyText, [], { cc, bcc });
         await client.chat.postMessage({ channel: command.channel_id, text: "Reply sent via custom SMTP!" });
       }
     } catch (err) {
@@ -1061,6 +1169,35 @@ function parseEmailList(value = "") {
     .split(/[,\s;]+/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function parseReplyText(parts = []) {
+  const bodyParts = [];
+  const cc = [];
+  const bcc = [];
+
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    if (lower.startsWith("cc:")) {
+      cc.push(...parseEmailList(part.slice(3)));
+    } else if (lower.startsWith("bcc:")) {
+      bcc.push(...parseEmailList(part.slice(4)));
+    } else {
+      bodyParts.push(part);
+    }
+  }
+
+  return {
+    bodyText: bodyParts.join(" ").trim(),
+    cc,
+    bcc,
+  };
+}
+
+function graphRecipients(addresses = []) {
+  return parseEmailList(addresses).map((address) => ({
+    emailAddress: { address },
+  }));
 }
 
 function formatEmailSummaryList(title, messages = []) {

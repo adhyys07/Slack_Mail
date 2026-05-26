@@ -15,7 +15,7 @@
 * **/open-email**: View full content of a specific email.
 	- Usage: `/open-email gmail 1`, `/open-email outlook 2`, or `/open-email custom 1` (indexes from the latest fetch)
 * **/reply-email**: Reply to a listed email.
-	- Usage: `/reply-email gmail 1 Thanks for the update` (indexes 1–5 from latest fetch)
+	- Usage: `/reply-email gmail 1 Thanks for the update cc:teammate@example.com bcc:hidden@example.com` (indexes 1–5 from latest fetch)
 * **/search-email**: Search inbox and get quick open links.
 	- Usage: `/search-email gmail invoice`, `/search-email outlook project`, or `/search-email custom invoice`
 * **/send-email**: Opens modal to send email (supports send now, save as draft, send later, CC, BCC, and attachments).
@@ -33,6 +33,12 @@
 	- Usage: `/starred-emails gmail [limit]`, `/starred-emails outlook [limit]`, or `/starred-emails custom [limit]`
 * **/archived-emails**: List archived emails.
 	- Usage: `/archived-emails gmail [limit]`, `/archived-emails outlook [limit]`, or `/archived-emails custom [limit]`
+* **/sent-emails**: List sent emails.
+	- Usage: `/sent-emails gmail [limit]`, `/sent-emails outlook [limit]`, or `/sent-emails custom [limit]`
+* **/unread-count**: Show inbox unread count.
+	- Usage: `/unread-count gmail`, `/unread-count outlook`, or `/unread-count custom`
+* **/disconnect-email**: Disconnect one provider from your Slack account.
+	- Usage: `/disconnect-email gmail`, `/disconnect-email outlook`, or `/disconnect-email custom`
 * **/clear-bot**: Clears bot messages in the channel.
 
 
@@ -90,7 +96,7 @@ PORT=3000
 	- Install to Workspace → copy `SLACK_BOT_TOKEN`.
 4) App Credentials: copy `SLACK_SIGNING_SECRET`.
 5) Slash Commands:
-	- /connect-email, /get-emails, /open-email, /reply-email, /send-email, /search-email, /star-email, /unstar-email, /archive-email, /delete-email, /move-email, /starred-emails, /archived-emails, /clear-bot
+	- /connect-email, /get-emails, /open-email, /reply-email, /send-email, /search-email, /star-email, /unstar-email, /archive-email, /delete-email, /move-email, /starred-emails, /archived-emails, /sent-emails, /unread-count, /disconnect-email, /clear-bot
 	- For each command set the Request URL to: `https://your-server.com/slack/events`
 6) Event Subscriptions:
 	- Enable events; Request URL: `https://your-server.com/slack/events`

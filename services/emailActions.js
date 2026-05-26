@@ -491,3 +491,105 @@ export async function listArchivedEmails(userId, provider, limit = DEFAULT_LIMIT
 
   throw new Error("Unknown provider.");
 }
+
+export async function listSentEmails(userId, provider, limit = DEFAULT_LIMIT) {
+  const normalized = normalizeProvider(provider);
+
+  if (normalized === "google") {
+    return { provider: "Gmail", messages: await listGmailSummaries(userId, "in:sent", limit) };
+  }
+
+  if (normalized === "microsoft") {
+    const url = `https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages?$top=${limit}&$select=id,from,subject,receivedDateTime&$orderby=receivedDateTime desc`;
+    return { provider: "Outlook", messages: await listOutlookSummaries(userId, url) };
+  }
+
+  if (normalized === "custom") {
+    const config = await getCustomConfig(userId);
+    const imap = await customConnection(config);
+    try {
+      const folder = await resolveCustomFolder(imap, ["Sent", "Sent Items", "Sent Mail", "INBOX.Sent"]);
+      imap.end();
+      return { provider: "Custom", messages: await listCustomMessages(userId, folder, ["ALL"], limit) };
+    } catch (err) {
+      imap.end();
+      throw err;
+    }
+  }
+
+  throw new Error("Unknown provider.");
+}
+
+async function customUnreadCount(userId) {
+  return withCustomImap(userId, async (imap) => {
+    await openBox(imap, "INBOX", true);
+    return new Promise((resolve, reject) => {
+      imap.search(["UNSEEN"], (err, results = []) => (err ? reject(err) : resolve(results.length)));
+    });
+  });
+}
+
+export async function getUnreadCount(userId, provider) {
+  const normalized = normalizeProvider(provider);
+
+  if (normalized === "google") {
+    const gmail = await getGmail(userId);
+    const resp = await gmail.users.messages.list({
+      userId: "me",
+      q: "is:unread category:primary",
+      maxResults: 1,
+    });
+    return { provider: "Gmail", count: resp.data.resultSizeEstimate || 0 };
+  }
+
+  if (normalized === "microsoft") {
+    const accessToken = await ensureMicrosoftAccessToken(userId);
+    const resp = await axios.get(
+      "https://graph.microsoft.com/v1.0/me/mailFolders/inbox?$select=unreadItemCount",
+      { headers: graphHeaders(accessToken) }
+    );
+    return { provider: "Outlook", count: resp.data.unreadItemCount || 0 };
+  }
+
+  if (normalized === "custom") {
+    return { provider: "Custom", count: await customUnreadCount(userId) };
+  }
+
+  throw new Error("Unknown provider.");
+}
+
+export async function disconnectEmailProvider(userId, provider) {
+  const normalized = normalizeProvider(provider);
+  const user = await getUser(userId);
+  if (!user) throw new Error("No account data found.");
+
+  if (normalized === "google") {
+    return {
+      ...user,
+      google_provider: null,
+      google_tokens: null,
+      google_access_token: null,
+      google_refresh_token: null,
+    };
+  }
+
+  if (normalized === "microsoft") {
+    return {
+      ...user,
+      microsoft_provider: null,
+      microsoft_access_token: null,
+      microsoft_refresh_token: null,
+      microsoft_expires_at: null,
+      microsoft_xoauth2: null,
+    };
+  }
+
+  if (normalized === "custom") {
+    return {
+      ...user,
+      custom_mail: null,
+    };
+  }
+
+  throw new Error("Unknown provider.");
+}
