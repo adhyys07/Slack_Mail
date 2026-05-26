@@ -19,6 +19,10 @@
 * **/search-email**: Search inbox and get quick open links.
 	- Usage: `/search-email gmail invoice`, `/search-email outlook project`, or `/search-email custom invoice`
 * **/send-email**: Opens modal to send email (supports CC, BCC, attachments, and send later).
+* **/star-email**: Star/flag an email.
+	- Usage: `/star-email gmail MESSAGE_ID`, `/star-email outlook MESSAGE_ID`, or `/star-email custom UID`
+* **/unstar-email**: Remove star/flag from an email.
+	- Usage: `/unstar-email gmail MESSAGE_ID`, `/unstar-email outlook MESSAGE_ID`, or `/unstar-email custom UID`
 * **/clear-bot**: Clears bot messages in the channel.
 
 
@@ -76,7 +80,7 @@ PORT=3000
 	- Install to Workspace → copy `SLACK_BOT_TOKEN`.
 4) App Credentials: copy `SLACK_SIGNING_SECRET`.
 5) Slash Commands:
-	- /connect-email, /get-emails, /open-email, /reply-email, /send-email, /search-email, /clear-bot
+	- /connect-email, /get-emails, /open-email, /reply-email, /send-email, /search-email, /star-email, /unstar-email, /clear-bot
 	- For each command set the Request URL to: `https://your-server.com/slack/events`
 6) Event Subscriptions:
 	- Enable events; Request URL: `https://your-server.com/slack/events`

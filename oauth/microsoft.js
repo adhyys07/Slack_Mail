@@ -18,7 +18,7 @@ function initMicrosoftOAuth(app) {
       response_type: "code",
       redirect_uri: REDIRECT_URI,
       response_mode: "query",
-      scope: "offline_access Mail.Read Mail.Send IMAP.AccessAsUser.All",
+      scope: "offline_access Mail.Read Mail.ReadWrite Mail.Send IMAP.AccessAsUser.All",
       state: slackUserId || "",
     });
     res.redirect(`${AUTH_URL}?${params.toString()}`);

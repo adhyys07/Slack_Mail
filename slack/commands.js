@@ -3,6 +3,7 @@ import { google } from "googleapis";
 import { getUser, saveUser } from "../db/store.js";
 import { getGoogleTokens } from "../providers/googleTokens.js";
 import { sendEmail, ensureMicrosoftAccessToken } from "../services/emailSender.js";
+import { starEmail, unstarEmail } from "../services/emailActions.js";
 import { listGmailAttachments, listOutlookAttachments } from "../services/attachments.js";
 import {
   listCustomEmails,
@@ -191,6 +192,62 @@ function registerCommands(app) {
       }
     } catch (err) {
       console.error("clear-bot error:", err);
+    }
+  });
+
+  app.command("/star-email", async ({ ack, command, client }) => {
+    await ack();
+
+    const [provider, messageIdOrUid] = (command.text || "").trim().split(/\s+/);
+
+    if (!provider || !messageIdOrUid) {
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: "Use: `/star-email gmail MESSAGE_ID`, `/star-email outlook MESSAGE_ID`, or `/star-email custom UID`",
+      });
+      return;
+    }
+
+    try {
+      const result = await starEmail(command.user_id, provider, messageIdOrUid);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Email starred via ${result.provider}.`,
+      });
+    } catch (err) {
+      console.error("star-email error:", err.response?.data || err.message);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Failed to star email: ${err.response?.data?.error?.message || err.message}`,
+      });
+    }
+  });
+
+  app.command("/unstar-email", async ({ ack, command, client }) => {
+    await ack();
+
+    const [provider, messageIdOrUid] = (command.text || "").trim().split(/\s+/);
+
+    if (!provider || !messageIdOrUid) {
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: "Use: `/unstar-email gmail MESSAGE_ID`, `/unstar-email outlook MESSAGE_ID`, or `/unstar-email custom UID`",
+      });
+      return;
+    }
+
+    try {
+      const result = await unstarEmail(command.user_id, provider, messageIdOrUid);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Email unstarred via ${result.provider}.`,
+      });
+    } catch (err) {
+      console.error("unstar-email error:", err.response?.data || err.message);
+      await client.chat.postMessage({
+        channel: command.channel_id,
+        text: `Failed to unstar email: ${err.response?.data?.error?.message || err.message}`,
+      });
     }
   });
 
@@ -436,7 +493,7 @@ function registerCommands(app) {
             const from = headers.find((h) => h.name === "From")?.value || "Unknown";
             const subject = headers.find((h) => h.name === "Subject")?.value || "No Subject";
 
-            emailText += `*From:* ${from}\n*Subject:* ${subject}\n\n`;
+            emailText += `*ID:* ${msg.id}\n*From:* ${from}\n*Subject:* ${subject}\n\n`;
 
             // Attachments (Gmail)
             const attachments = await listGmailAttachments(userId, msg.id);
@@ -496,7 +553,7 @@ function registerCommands(app) {
             const from = msg.from?.emailAddress?.address || "Unknown";
             const subject = msg.subject || "No Subject";
 
-            emailText += `*From:* ${from}\n*Subject:* ${subject}\n\n`;
+            emailText += `*ID:* ${msg.id}\n*From:* ${from}\n*Subject:* ${subject}\n\n`;
 
             const attachments = await listOutlookAttachments(userId, msg.id);
             if (attachments.length) {
@@ -538,7 +595,7 @@ function registerCommands(app) {
 
           let emailText = `*Custom inbox (last ${messages.length})*\n\n`;
           messages.forEach((msg, index) => {
-            emailText += `${index + 1}. *From:* ${msg.from}\n*Subject:* ${msg.subject}\n\n`;
+            emailText += `${index + 1}. *UID:* ${msg.uid || "unknown"}\n*From:* ${msg.from}\n*Subject:* ${msg.subject}\n\n`;
           });
           await client.chat.postMessage({ channel: command.channel_id, text: emailText });
         } catch (err) {
@@ -590,7 +647,7 @@ function registerCommands(app) {
           const headers = detail.data.payload.headers;
           const from = headers.find((h) => h.name === "From")?.value || "Unknown";
           const subject = headers.find((h) => h.name === "Subject")?.value || "No Subject";
-          text += `${i+1}. *From:* ${from}\n   *Subject:* ${subject}\n   → /open-email gmail ${i+1}\n\n`;
+          text += `${i+1}. *ID:* ${msg.id}\n   *From:* ${from}\n   *Subject:* ${subject}\n   -> /open-email gmail ${i+1}\n\n`;
         }
         await client.chat.postMessage({ channel: command.channel_id, text });
       } else if (normalizedProvider === "microsoft") {
@@ -609,7 +666,7 @@ function registerCommands(app) {
           const msg = messages[i];
           const from = msg.from?.emailAddress?.address || "Unknown";
           const subject = msg.subject || "No Subject";
-          text += `${i+1}. *From:* ${from}\n   *Subject:* ${subject}\n   → /open-email outlook ${i+1}\n\n`;
+          text += `${i+1}. *ID:* ${msg.id}\n   *From:* ${from}\n   *Subject:* ${subject}\n   -> /open-email outlook ${i+1}\n\n`;
         }
         await client.chat.postMessage({ channel: command.channel_id, text });
       } else {
@@ -620,7 +677,7 @@ function registerCommands(app) {
         }
         let text = `*Custom inbox search* ("${query}") - ${messages.length} found\n\n`;
         messages.forEach((msg, index) => {
-          text += `${index + 1}. *From:* ${msg.from}\n   *Subject:* ${msg.subject}\n   -> /open-email custom ${index + 1}\n\n`;
+          text += `${index + 1}. *UID:* ${msg.uid || "unknown"}\n   *From:* ${msg.from}\n   *Subject:* ${msg.subject}\n   -> /open-email custom ${index + 1}\n\n`;
         });
         await client.chat.postMessage({ channel: command.channel_id, text });
       }
